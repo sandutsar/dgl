@@ -20,8 +20,9 @@ export DGLBACKEND=$1
 export DGLTESTDEV=$2
 export DGL_LIBRARY_PATH=${PWD}/build
 export PYTHONPATH=tests:${PWD}/python:$PYTHONPATH
-export DGL_DOWNLOAD_DIR=${PWD}
+export DGL_DOWNLOAD_DIR=${PWD}/_download
 export TF_FORCE_GPU_ALLOW_GROWTH=true
+unset TORCH_ALLOW_TF32_CUBLAS_OVERRIDE
 
 if [ $2 == "gpu" ] 
 then
@@ -32,12 +33,10 @@ fi
 
 conda activate ${DGLBACKEND}-ci
 
-python3 -m pip install pytest pyyaml pandas pydantic || EXIT /B 1
-python3 -m pytest -v --junitxml=pytest_compute.xml tests/compute || fail "compute"
-python3 -m pytest -v --junitxml=pytest_backend.xml tests/$DGLBACKEND || fail "backend-specific"
-
-export OMP_NUM_THREADS=1
-export DMLC_LOG_DEBUG=1
-if [ $2 != "gpu" ]; then
-    python3 -m pytest -v --capture=tee-sys --junitxml=pytest_distributed.xml tests/distributed/*.py || fail "distributed"
+if [ $DGLBACKEND == "mxnet" ]
+then
+  python3 -m pytest -v --junitxml=pytest_compute.xml --durations=100 --ignore=tests/python/common/test_ffi.py tests/python/common || fail "common"
+else
+  python3 -m pytest -v --junitxml=pytest_common.xml --durations=100 tests/python/common || fail "common"
 fi
+python3 -m pytest -v --junitxml=pytest_backend.xml --durations=100 tests/python/$DGLBACKEND || fail "backend-specific"

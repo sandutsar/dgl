@@ -12,6 +12,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+dataset/
+datasets/
 develop-eggs/
 dist/
 downloads/
@@ -27,6 +29,9 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+
+# Whitelist some distribution / package non-related directories
+!tests/dist
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -151,14 +156,15 @@ cscope.*
 # parameters
 *.params
 
-# vscode 
+# vscode
 .clangd
 .vscode
 
 # asv
 .asv
 
-config.cmake
 .ycm_extra_conf.py
 **.png
 
+# model file
+*.pth

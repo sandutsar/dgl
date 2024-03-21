@@ -1,12 +1,13 @@
-/*!
+/**
  *  Copyright (c) 2020 by Contributors
- * \file array/cpu/spmm_binary_ops.h
- * \brief SPMM CPU Binary ops.
+ * @file array/cpu/spmm_binary_ops.h
+ * @brief SPMM CPU Binary ops.
  */
 #ifndef DGL_ARRAY_CPU_SPMM_BINARY_OPS_H_
 #define DGL_ARRAY_CPU_SPMM_BINARY_OPS_H_
 #include <dgl/array.h>
 #include <dgl/bcast.h>
+
 #include <limits>
 namespace dgl {
 namespace aten {
@@ -102,9 +103,17 @@ constexpr bool CopyRhs<DType>::use_rhs;
 //////////////////////////////// Reduce operators on CPU
 ///////////////////////////////////
 template <typename DType>
+constexpr DType MinDType() {
+  if (std::is_same<DType, BFloat16>::value)
+    return BFloat16::Min();
+  else
+    return -std::numeric_limits<DType>::infinity();
+}
+
+template <typename DType>
 struct Max {
   typedef DType type;
-  static constexpr DType zero = -std::numeric_limits<DType>::infinity();
+  static constexpr DType zero = MinDType<DType>();
   // return true if accum should be replaced
   inline static DType Call(DType accum, DType val) { return accum < val; }
 };
@@ -112,9 +121,17 @@ template <typename DType>
 constexpr DType Max<DType>::zero;
 
 template <typename DType>
+constexpr DType MaxDType() {
+  if (std::is_same<DType, BFloat16>::value)
+    return BFloat16::Max();
+  else
+    return std::numeric_limits<DType>::infinity();
+}
+
+template <typename DType>
 struct Min {
   typedef DType type;
-  static constexpr DType zero = std::numeric_limits<DType>::infinity();
+  static constexpr DType zero = MaxDType<DType>();
   // return true if accum should be replaced
   inline static DType Call(DType accum, DType val) { return accum > val; }
 };
@@ -143,21 +160,6 @@ constexpr DType Min<DType>::zero;
       { __VA_ARGS__ }                                           \
     } else {                                                    \
       LOG(FATAL) << "Unsupported SpMM binary operator: " << op; \
-    }                                                           \
-  } while (0)
-
-#define SWITCH_BITS(bits, DType, ...)                           \
-  do {                                                          \
-    if ((bits) == 16) {                                         \
-      LOG(FATAL) << "FP16 not supported on CPU";                \
-    } else if ((bits) == 32) {                                  \
-      typedef float DType;                                      \
-      { __VA_ARGS__ }                                           \
-    } else if ((bits) == 64) {                                  \
-      typedef double DType;                                     \
-      { __VA_ARGS__ }                                           \
-    } else {                                                    \
-      LOG(FATAL) << "Data type not recognized with bits " << bits; \
     }                                                           \
   } while (0)
 

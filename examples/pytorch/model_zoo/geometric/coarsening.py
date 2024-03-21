@@ -31,7 +31,7 @@ def laplacian(W, normalized=True):
 def rescale_L(L, lmax=2):
     """Rescale Laplacian eigenvalues to [-1,1]"""
     M, M = L.shape
-    I = scipy.sparse.identity(M, format='csr', dtype=L.dtype)
+    I = scipy.sparse.identity(M, format="csr", dtype=L.dtype)
     L /= lmax * 2
     L -= I
     return L
@@ -39,7 +39,9 @@ def rescale_L(L, lmax=2):
 
 def lmax_L(L):
     """Compute largest Laplacian eigenvalue"""
-    return scipy.sparse.linalg.eigsh(L, k=1, which='LM', return_eigenvectors=False)[0]
+    return scipy.sparse.linalg.eigsh(
+        L, k=1, which="LM", return_eigenvectors=False
+    )[0]
 
 
 # graph coarsening with Heavy Edge Matching
@@ -57,7 +59,11 @@ def coarsen(A, levels):
         A = A.tocsr()
         A.eliminate_zeros()
         Mnew, Mnew = A.shape
-        print('Layer {0}: M_{0} = |V| = {1} nodes ({2} added), |E| = {3} edges'.format(i, Mnew, Mnew - M, A.nnz // 2))
+        print(
+            "Layer {0}: M_{0} = |V| = {1} nodes ({2} added), |E| = {3} edges".format(
+                i, Mnew, Mnew - M, A.nnz // 2
+            )
+        )
 
         L = laplacian(A, normalized=True)
         laplacians.append(L)
@@ -95,10 +101,9 @@ def HEM(W, levels, rid=None):
     graphs = []
     graphs.append(W)
 
-    print('Heavy Edge Matching coarsening with Xavier version')
+    print("Heavy Edge Matching coarsening with Xavier version")
 
     for _ in range(levels):
-
         # CHOOSE THE WEIGHTS FOR THE PAIRING
         # weights = ones(N,1)       # metis weights
         weights = degree  # graclus weights
@@ -152,7 +157,7 @@ def HEM_one_level(rr, cc, vv, rid, weights):
     nnz = rr.shape[0]
     N = rr[nnz - 1] + 1
 
-    marked = np.zeros(N, np.bool)
+    marked = np.zeros(N, np.bool_)
     rowstart = np.zeros(N, np.int32)
     rowlength = np.zeros(N, np.int32)
     cluster_id = np.zeros(N, np.int32)
@@ -180,10 +185,11 @@ def HEM_one_level(rr, cc, vv, rid, weights):
                 if marked[nid]:
                     tval = 0.0
                 else:
-
                     # First approach
                     if 2 == 1:
-                        tval = vv[rs + jj] * (1.0 / weights[tid] + 1.0 / weights[nid])
+                        tval = vv[rs + jj] * (
+                            1.0 / weights[tid] + 1.0 / weights[nid]
+                        )
 
                     # Second approach
                     if 1 == 1:
@@ -192,7 +198,7 @@ def HEM_one_level(rr, cc, vv, rid, weights):
                         Wjj = vv[rowstart[nid]]
                         di = weights[tid]
                         dj = weights[nid]
-                        tval = (2. * Wij + Wii + Wjj) * 1. / (di + dj + 1e-9)
+                        tval = (2.0 * Wij + Wii + Wjj) * 1.0 / (di + dj + 1e-9)
 
                 if tval > wmax:
                     wmax = tval
@@ -222,7 +228,6 @@ def compute_perm(parents):
         indices.append(list(range(M_last)))
 
     for parent in parents[::-1]:
-
         # Fake nodes go after real ones.
         pool_singeltons = len(parent)
 
@@ -247,7 +252,7 @@ def compute_perm(parents):
 
     # Sanity checks.
     for i, indices_layer in enumerate(indices):
-        M = M_last * 2 ** i
+        M = M_last * 2**i
         # Reduction by 2 at each layer (binary tree).
         assert len(indices[0] == M)
         # The new ordering does not omit an indice.
@@ -256,8 +261,9 @@ def compute_perm(parents):
     return indices[::-1]
 
 
-assert (compute_perm([np.array([4, 1, 1, 2, 2, 3, 0, 0, 3]), np.array([2, 1, 0, 1, 0])])
-        == [[3, 4, 0, 9, 1, 2, 5, 8, 6, 7, 10, 11], [2, 4, 1, 3, 0, 5], [0, 1, 2]])
+assert compute_perm(
+    [np.array([4, 1, 1, 2, 2, 3, 0, 0, 3]), np.array([2, 1, 0, 1, 0])]
+) == [[3, 4, 0, 9, 1, 2, 5, 8, 6, 7, 10, 11], [2, 4, 1, 3, 0, 5], [0, 1, 2]]
 
 
 def perm_adjacency(A, indices):

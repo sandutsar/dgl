@@ -132,6 +132,7 @@ under the ``dgl`` namespace.
     DGLGraph.add_self_loop
     DGLGraph.remove_self_loop
     DGLGraph.to_simple
+    DGLGraph.to_cugraph
     DGLGraph.reorder_graph
 
 Adjacency and incidence matrix
@@ -143,8 +144,9 @@ Methods for getting the adjacency and the incidence matrix of the graph.
     :toctree: ../../generated/
 
     DGLGraph.adj
-    DGLGraph.adj_sparse
     DGLGraph.adjacency_matrix
+    DGLGraph.adj_tensors
+    DGLGraph.adj_external
     DGLGraph.inc
     DGLGraph.incidence_matrix
 

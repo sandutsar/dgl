@@ -1,4 +1,4 @@
-'''
+"""
 Distributed Node Classification
 ===============================
 
@@ -22,6 +22,8 @@ Here we store the node labels as node data in the DGL Graph.
 .. code-block:: python
 
 
+    import os
+    os.environ['DGLBACKEND'] = 'pytorch'
     import dgl
     import torch as th
     from ogb.nodeproppred import DglNodePropPredDataset
@@ -45,11 +47,11 @@ the boolean arrays will be stored with the graph partitions.
 
     splitted_idx = data.get_idx_split()
     train_nid, val_nid, test_nid = splitted_idx['train'], splitted_idx['valid'], splitted_idx['test']
-    train_mask = th.zeros((graph.number_of_nodes(),), dtype=th.bool)
+    train_mask = th.zeros((graph.num_nodes(),), dtype=th.bool)
     train_mask[train_nid] = True
-    val_mask = th.zeros((graph.number_of_nodes(),), dtype=th.bool)
+    val_mask = th.zeros((graph.num_nodes(),), dtype=th.bool)
     val_mask[val_nid] = True
-    test_mask = th.zeros((graph.number_of_nodes(),), dtype=th.bool)
+    test_mask = th.zeros((graph.num_nodes(),), dtype=th.bool)
     test_mask[test_nid] = True
     graph.ndata['train_mask'] = train_mask
     graph.ndata['val_mask'] = val_mask
@@ -243,7 +245,7 @@ The code below defines the GraphSage model.
             return x
 
     num_hidden = 256
-    num_labels = len(th.unique(g.ndata['labels'][0:g.number_of_nodes()]))
+    num_labels = len(th.unique(g.ndata['labels'][0:g.num_nodes()]))
     num_layers = 2
     lr = 0.001
     model = SAGE(g.ndata['feat'].shape[1], num_hidden, num_labels, num_layers)
@@ -265,7 +267,8 @@ Pytorch's `DistributedDataParallel`.
 Distributed mini-batch sampler
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-We can use the same `NodeDataLoader` to create a distributed mini-batch sampler for
+We can use the same :class:`~dgl.dataloading.pytorch.DistNodeDataLoader`, the distributed counterpart
+of :class:`~dgl.dataloading.pytorch.NodeDataLoader`, to create a distributed mini-batch sampler for
 node classification.
 
 
@@ -274,10 +277,10 @@ node classification.
 .. code-block:: python
 
     sampler = dgl.dataloading.MultiLayerNeighborSampler([25,10])
-    train_dataloader = dgl.dataloading.NodeDataLoader(
+    train_dataloader = dgl.dataloading.DistNodeDataLoader(
                                  g, train_nid, sampler, batch_size=1024,
                                  shuffle=True, drop_last=False)
-    valid_dataloader = dgl.dataloading.NodeDataLoader(
+    valid_dataloader = dgl.dataloading.DistNodeDataLoader(
                                  g, valid_nid, sampler, batch_size=1024,
                                  shuffle=False, drop_last=False)
 
@@ -298,23 +301,24 @@ The training loop for distributed training is also exactly the same as the singl
     for epoch in range(10):
         # Loop over the dataloader to sample mini-batches.
         losses = []
-        for step, (input_nodes, seeds, blocks) in enumerate(train_dataloader):
-            # Load the input features as well as output labels
-            batch_inputs = g.ndata['feat'][input_nodes]
-            batch_labels = g.ndata['labels'][seeds]
+        with model.join():
+            for step, (input_nodes, seeds, blocks) in enumerate(train_dataloader):
+                # Load the input features as well as output labels
+                batch_inputs = g.ndata['feat'][input_nodes]
+                batch_labels = g.ndata['labels'][seeds]
 
-            # Compute loss and prediction
-            batch_pred = model(blocks, batch_inputs)
-            loss = loss_fcn(batch_pred, batch_labels)
-            optimizer.zero_grad()
-            loss.backward()
-            losses.append(loss.detach().cpu().numpy())
-            optimizer.step()
+                # Compute loss and prediction
+                batch_pred = model(blocks, batch_inputs)
+                loss = loss_fcn(batch_pred, batch_labels)
+                optimizer.zero_grad()
+                loss.backward()
+                losses.append(loss.detach().cpu().numpy())
+                optimizer.step()
 
         # validation
         predictions = []
         labels = []
-        with th.no_grad():
+        with th.no_grad(), model.join():
             for step, (input_nodes, seeds, blocks) in enumerate(valid_dataloader):
                 inputs = g.ndata['feat'][input_nodes]
                 labels.append(g.ndata['labels'][seeds].numpy())
@@ -432,4 +436,57 @@ If we split the graph into four partitions as demonstrated at the beginning of t
   ip_addr3
   ip_addr4
 
-'''
+Sample neighbors with `GraphBolt`
+----------------------------------
+
+Since DGL 2.0, we have introduced a new dataloading framework
+`GraphBolt <https://doc.dgl.ai/stochastic_training/index.html>`_ in
+which sampling is highly improved compared to previous implementations in DGL.
+As a result, we've introduced `GraphBolt` to distributed training to improve
+the performance of distributed sampling. What's more, the graph partitions
+could be much smaller than before, which is beneficial for the loading speed
+and memory usage during distributed training.
+
+Graph partitioning
+^^^^^^^^^^^^^^^^^^^
+
+In order to benefit from `GraphBolt` for distributed sampling, we need to
+convert partitions from `DGL` format to `GraphBolt` format. This can be done by
+`dgl.distributed.dgl_partition_to_graphbolt` function. Alternatively, we can use
+`dgl.distributed.partition_graph` function to generate partitions in `GraphBolt`
+format directly.
+
+1. Convert partitions from `DGL` format to `GraphBolt` format.
+
+.. code-block:: python
+  
+    part_config = "4part_data/ogbn-products.json"
+    dgl.distributed.dgl_partition_to_graphbolt(part_config)
+
+The new partitions will be stored in the same directory as the original
+partitions.
+
+2. Generate partitions in `GraphBolt` format directly. Just set the
+`use_graphbolt` flag to `True` in `partition_graph` function.
+
+.. code-block:: python
+  
+    dgl.distributed.partition_graph(graph, graph_name='ogbn-products', num_parts=4,
+                                    out_path='4part_data',
+                                    balance_ntypes=graph.ndata['train_mask'],
+                                    balance_edges=True,
+                                    use_graphbolt=True)
+
+Enable `GraphBolt` sampling in the training script
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Just set the `use_graphbolt` flag to `True` in `dgl.distributed.initialize`
+function. This is the only change needed in the training script to enable
+`GraphBolt` sampling.
+
+.. code-block:: python
+
+    dgl.distributed.initialize('ip_config.txt', use_graphbolt=True)
+
+  
+"""

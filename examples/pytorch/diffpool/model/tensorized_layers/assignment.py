@@ -1,8 +1,7 @@
 import torch
-
 from torch import nn as nn
-from torch.nn import functional as F
 from torch.autograd import Variable
+from torch.nn import functional as F
 
 from model.tensorized_layers.graphsage import BatchedGraphSAGE
 

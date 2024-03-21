@@ -1,12 +1,18 @@
 """Module for mapping between node/edge IDs and node/edge types."""
+
 import numpy as np
+import torch
+
+from .. import backend as F, utils
 
 from .._ffi.function import _init_api
-from .. import backend as F
-from .. import utils
+
+
+__all__ = ["IdMap"]
+
 
 class IdMap:
-    '''A map for converting node/edge IDs to their type IDs and type-wise IDs.
+    """A map for converting node/edge IDs to their type IDs and type-wise IDs.
 
     For a heterogeneous graph, DGL assigns an integer ID to each node/edge type;
     node and edge of different types have independent IDs starting from zero.
@@ -96,27 +102,42 @@ class IdMap:
         for a particular node type in a partition. For example, all nodes of type ``"T"`` in
         partition ``i`` has ID range ``id_ranges["T"][i][0]`` to ``id_ranges["T"][i][1]``.
         It is the same as the `node_map` argument in `RangePartitionBook`.
-    '''
+    """
+
     def __init__(self, id_ranges):
-        self.num_parts = list(id_ranges.values())[0].shape[0]
+        id_ranges_values = list(id_ranges.values())
+        assert isinstance(
+            id_ranges_values[0], np.ndarray
+        ), "id_ranges should be a dict of numpy arrays."
+        self.num_parts = id_ranges_values[0].shape[0]
+        self.dtype = id_ranges_values[0].dtype
+        self.dtype_str = "int32" if self.dtype == np.int32 else "int64"
         self.num_types = len(id_ranges)
-        ranges = np.zeros((self.num_parts * self.num_types, 2), dtype=np.int64)
+        ranges = np.zeros(
+            (self.num_parts * self.num_types, 2), dtype=self.dtype
+        )
         typed_map = []
-        id_ranges = list(id_ranges.values())
+        id_ranges = id_ranges_values
         id_ranges.sort(key=lambda a: a[0, 0])
         for i, id_range in enumerate(id_ranges):
-            ranges[i::self.num_types] = id_range
-            map1 = np.cumsum(id_range[:, 1] - id_range[:, 0])
+            ranges[i :: self.num_types] = id_range
+            map1 = np.cumsum(id_range[:, 1] - id_range[:, 0], dtype=self.dtype)
             typed_map.append(map1)
 
         assert np.all(np.diff(ranges[:, 0]) >= 0)
         assert np.all(np.diff(ranges[:, 1]) >= 0)
-        self.range_start = utils.toindex(np.ascontiguousarray(ranges[:, 0]))
-        self.range_end = utils.toindex(np.ascontiguousarray(ranges[:, 1]) - 1)
-        self.typed_map = utils.toindex(np.concatenate(typed_map))
+        self.range_start = utils.toindex(
+            np.ascontiguousarray(ranges[:, 0]), dtype=self.dtype_str
+        )
+        self.range_end = utils.toindex(
+            np.ascontiguousarray(ranges[:, 1]) - 1, dtype=self.dtype_str
+        )
+        self.typed_map = utils.toindex(
+            np.concatenate(typed_map), dtype=self.dtype_str
+        )
 
     def __call__(self, ids):
-        '''Convert the homogeneous IDs to (type_id, type_wise_id).
+        """Convert the homogeneous IDs to (type_id, type_wise_id).
 
         Parameters
         ----------
@@ -129,19 +150,29 @@ class IdMap:
             Type IDs
         per_type_ids : Tensor
             Type-wise IDs
-        '''
+        """
         if self.num_types == 0:
             return F.zeros((len(ids),), F.dtype(ids), F.cpu()), ids
         if len(ids) == 0:
             return ids, ids
 
-        ids = utils.toindex(ids)
-        ret = _CAPI_DGLHeteroMapIds(ids.todgltensor(),
-                                    self.range_start.todgltensor(),
-                                    self.range_end.todgltensor(),
-                                    self.typed_map.todgltensor(),
-                                    self.num_parts, self.num_types)
-        ret = utils.toindex(ret).tousertensor()
-        return ret[:len(ids)], ret[len(ids):]
+        ids = utils.toindex(ids, dtype=self.dtype_str)
+        ret = _CAPI_DGLHeteroMapIds(
+            ids.todgltensor(),
+            self.range_start.todgltensor(),
+            self.range_end.todgltensor(),
+            self.typed_map.todgltensor(),
+            self.num_parts,
+            self.num_types,
+        )
+        ret = utils.toindex(ret, dtype=self.dtype_str).tousertensor()
+        return ret[: len(ids)], ret[len(ids) :]
+
+    @property
+    def torch_dtype(self):
+        """Return the data type of the ID map."""
+        # [TODO][Rui] Use torch instead of numpy.
+        return torch.int32 if self.dtype == np.int32 else torch.int64
+
 
 _init_api("dgl.distributed.id_map")

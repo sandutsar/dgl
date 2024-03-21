@@ -32,14 +32,16 @@ fi
 export DGLBACKEND=pytorch
 export DGL_LIBRARY_PATH=${PWD}/build
 export PYTHONPATH=${PWD}/python:$PYTHONPATH
-export DGL_DOWNLOAD_DIR=${PWD}
+export DGL_DOWNLOAD_DIR=${PWD}/_download
 
 # test
+
+python3 -m pytest -v --junitxml=pytest_backend.xml --durations=100 tests/examples || fail "sparse examples on $1"
 
 pushd $GCN_EXAMPLE_DIR> /dev/null
 
 python3 pagerank.py || fail "run pagerank.py on $1"
-python3 gcn/gcn.py --dataset cora --gpu $dev || fail "run gcn/gcn.py on $1"
+python3 gcn/train.py --dataset cora || fail "run gcn/train.py on $1"
 python3 lda/lda_model.py || fail "run lda/lda_model.py on $1"
 
 popd > /dev/null

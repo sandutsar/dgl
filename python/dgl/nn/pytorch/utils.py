@@ -1,10 +1,13 @@
 """Utilities for pytorch NN package"""
-#pylint: disable=no-member, invalid-name
+# pylint: disable=no-member, invalid-name
 
 import torch as th
+import torch.nn.functional as F
 from torch import nn
-from ... import DGLGraph
+
+from ... import DGLGraph, function as fn
 from ...base import dgl_warning
+
 
 def matmul_maybe_select(A, B):
     """Perform Matrix multiplication C = A * B but A could be an integer id vector.
@@ -46,6 +49,7 @@ def matmul_maybe_select(A, B):
         return B.index_select(0, A)
     else:
         return th.matmul(A, B)
+
 
 def bmm_maybe_select(A, B, index):
     """Slice submatrices of A by the given index and perform bmm.
@@ -90,12 +94,14 @@ def bmm_maybe_select(A, B, index):
         BB = B.index_select(0, index)
         return th.bmm(A.unsqueeze(1), BB).squeeze()
 
+
 # pylint: disable=W0235
 class Identity(nn.Module):
     """A placeholder identity operator that is argument-insensitive.
     (Identity has already been supported by PyTorch 1.2, we will directly
     import torch.nn.Identity in the future)
     """
+
     def __init__(self):
         super(Identity, self).__init__()
 
@@ -103,12 +109,9 @@ class Identity(nn.Module):
         """Return input"""
         return x
 
-class Sequential(nn.Sequential):
-    r"""
 
-    Description
-    -----------
-    A sequential container for stacking graph neural network modules.
+class Sequential(nn.Sequential):
+    r"""A sequential container for stacking graph neural network modules
 
     DGL supports two modes: sequentially apply GNN modules on 1) the same graph or
     2) a list of given graphs. In the second case, the number of graphs equals the
@@ -179,7 +182,7 @@ class Sequential(nn.Sequential):
     >>>             graph.ndata['h'] = n_feat
     >>>             graph.update_all(fn.copy_u('h', 'm'), fn.sum('m', 'h'))
     >>>             n_feat += graph.ndata['h']
-    >>>             return n_feat.view(graph.number_of_nodes() // 2, 2, -1).sum(1)
+    >>>             return n_feat.view(graph.num_nodes() // 2, 2, -1).sum(1)
     >>>
     >>> g1 = dgl.DGLGraph(nx.erdos_renyi_graph(32, 0.05))
     >>> g2 = dgl.DGLGraph(nx.erdos_renyi_graph(16, 0.2))
@@ -222,16 +225,18 @@ class Sequential(nn.Sequential):
                     feats = (feats,)
                 feats = module(graph, *feats)
         else:
-            raise TypeError('The first argument of forward must be a DGLGraph'
-                            ' or a list of DGLGraph s')
+            raise TypeError(
+                "The first argument of forward must be a DGLGraph"
+                " or a list of DGLGraph s"
+            )
         return feats
 
-class WeightBasis(nn.Module):
-    r"""Basis decomposition module.
 
-    Basis decomposition is introduced in "`Modeling Relational Data with Graph
-    Convolutional Networks <https://arxiv.org/abs/1703.06103>`__"
-    and can be described as below:
+class WeightBasis(nn.Module):
+    r"""Basis decomposition from `Modeling Relational Data with Graph
+    Convolutional Networks <https://arxiv.org/abs/1703.06103>`__
+
+    It can be described as below:
 
     .. math::
 
@@ -252,24 +257,28 @@ class WeightBasis(nn.Module):
     num_outputs : int
         Number of outputs.
     """
-    def __init__(self,
-                 shape,
-                 num_bases,
-                 num_outputs):
+
+    def __init__(self, shape, num_bases, num_outputs):
         super(WeightBasis, self).__init__()
         self.shape = shape
         self.num_bases = num_bases
         self.num_outputs = num_outputs
 
         if num_outputs <= num_bases:
-            dgl_warning('The number of weight outputs should be larger than the number'
-                        ' of bases.')
+            dgl_warning(
+                "The number of weight outputs should be larger than the number"
+                " of bases."
+            )
 
         self.weight = nn.Parameter(th.Tensor(self.num_bases, *shape))
-        nn.init.xavier_uniform_(self.weight, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(
+            self.weight, gain=nn.init.calculate_gain("relu")
+        )
         # linear combination coefficients
         self.w_comp = nn.Parameter(th.Tensor(self.num_outputs, self.num_bases))
-        nn.init.xavier_uniform_(self.w_comp, gain=nn.init.calculate_gain('relu'))
+        nn.init.xavier_uniform_(
+            self.w_comp, gain=nn.init.calculate_gain("relu")
+        )
 
     def forward(self):
         r"""Forward computation
@@ -283,14 +292,12 @@ class WeightBasis(nn.Module):
         weight = th.matmul(self.w_comp, self.weight.view(self.num_bases, -1))
         return weight.view(self.num_outputs, *self.shape)
 
-class JumpingKnowledge(nn.Module):
-    r"""
 
-    Description
-    -----------
-    The Jumping Knowledge aggregation module introduced in `Representation Learning on
-    Graphs with Jumping Knowledge Networks <https://arxiv.org/abs/1806.03536>`__. It
-    aggregates the output representations of multiple GNN layers with
+class JumpingKnowledge(nn.Module):
+    r"""The Jumping Knowledge aggregation module from `Representation Learning on
+    Graphs with Jumping Knowledge Networks <https://arxiv.org/abs/1806.03536>`__
+
+    It aggregates the output representations of multiple GNN layers with
 
     **concatenation**
 
@@ -351,17 +358,25 @@ class JumpingKnowledge(nn.Module):
     >>> model(feat_list).shape
     torch.Size([3, 4])
     """
-    def __init__(self, mode='cat', in_feats=None, num_layers=None):
+
+    def __init__(self, mode="cat", in_feats=None, num_layers=None):
         super(JumpingKnowledge, self).__init__()
-        assert mode in ['cat', 'max', 'lstm'], \
-            "Expect mode to be 'cat', or 'max' or 'lstm', got {}".format(mode)
+        assert mode in [
+            "cat",
+            "max",
+            "lstm",
+        ], "Expect mode to be 'cat', or 'max' or 'lstm', got {}".format(mode)
         self.mode = mode
 
-        if mode == 'lstm':
-            assert in_feats is not None, 'in_feats is required for lstm mode'
-            assert num_layers is not None, 'num_layers is required for lstm mode'
+        if mode == "lstm":
+            assert in_feats is not None, "in_feats is required for lstm mode"
+            assert (
+                num_layers is not None
+            ), "num_layers is required for lstm mode"
             hidden_size = (num_layers * in_feats) // 2
-            self.lstm = nn.LSTM(in_feats, hidden_size, bidirectional=True, batch_first=True)
+            self.lstm = nn.LSTM(
+                in_feats, hidden_size, bidirectional=True, batch_first=True
+            )
             self.att = nn.Linear(2 * hidden_size, 1)
 
     def reset_parameters(self):
@@ -371,7 +386,7 @@ class JumpingKnowledge(nn.Module):
         -----------
         Reinitialize learnable parameters. This comes into effect only for the lstm mode.
         """
-        if self.mode == 'lstm':
+        if self.mode == "lstm":
             self.lstm.reset_parameters()
             self.att.reset_parameters()
 
@@ -392,14 +407,150 @@ class JumpingKnowledge(nn.Module):
         Tensor
             The aggregated representations.
         """
-        if self.mode == 'cat':
+        if self.mode == "cat":
             return th.cat(feat_list, dim=-1)
-        elif self.mode == 'max':
+        elif self.mode == "max":
             return th.stack(feat_list, dim=-1).max(dim=-1)[0]
         else:
             # LSTM
-            stacked_feat_list = th.stack(feat_list, dim=1) # (N, num_layers, in_feats)
+            stacked_feat_list = th.stack(
+                feat_list, dim=1
+            )  # (N, num_layers, in_feats)
             alpha, _ = self.lstm(stacked_feat_list)
-            alpha = self.att(alpha).squeeze(-1)            # (N, num_layers)
+            alpha = self.att(alpha).squeeze(-1)  # (N, num_layers)
             alpha = th.softmax(alpha, dim=-1)
             return (stacked_feat_list * alpha.unsqueeze(-1)).sum(dim=1)
+
+
+class LabelPropagation(nn.Module):
+    r"""Label Propagation from `Learning from Labeled and Unlabeled Data with Label
+    Propagation <http://mlg.eng.cam.ac.uk/zoubin/papers/CMU-CALD-02-107.pdf>`__
+
+    .. math::
+
+        \mathbf{Y}^{(t+1)} = \alpha \tilde{A} \mathbf{Y}^{(t)} + (1 - \alpha) \mathbf{Y}^{(0)}
+
+    where unlabeled data is initially set to zero and inferred from labeled data via
+    propagation. :math:`\alpha` is a weight parameter for balancing between updated labels
+    and initial labels. :math:`\tilde{A}` denotes the normalized adjacency matrix.
+
+    Parameters
+    ----------
+    k: int
+        The number of propagation steps.
+    alpha : float
+        The :math:`\alpha` coefficient in range [0, 1].
+    norm_type : str, optional
+        The type of normalization applied to the adjacency matrix, must be one of the
+        following choices:
+
+        * ``row``: row-normalized adjacency as :math:`D^{-1}A`
+
+        * ``sym``: symmetrically normalized adjacency as :math:`D^{-1/2}AD^{-1/2}`
+
+        Default: 'sym'.
+    clamp : bool, optional
+        A bool flag to indicate whether to clamp the labels to [0, 1] after propagation.
+        Default: True.
+    normalize: bool, optional
+        A bool flag to indicate whether to apply row-normalization after propagation.
+        Default: False.
+    reset : bool, optional
+        A bool flag to indicate whether to reset the known labels after each
+        propagation step. Default: False.
+
+    Examples
+    --------
+    >>> import torch
+    >>> import dgl
+    >>> from dgl.nn import LabelPropagation
+
+    >>> label_propagation = LabelPropagation(k=5, alpha=0.5, clamp=False, normalize=True)
+    >>> g = dgl.rand_graph(5, 10)
+    >>> labels = torch.tensor([0, 2, 1, 3, 0]).long()
+    >>> mask = torch.tensor([0, 1, 1, 1, 0]).bool()
+    >>> new_labels = label_propagation(g, labels, mask)
+    """
+
+    def __init__(
+        self,
+        k,
+        alpha,
+        norm_type="sym",
+        clamp=True,
+        normalize=False,
+        reset=False,
+    ):
+        super(LabelPropagation, self).__init__()
+        self.k = k
+        self.alpha = alpha
+        self.norm_type = norm_type
+        self.clamp = clamp
+        self.normalize = normalize
+        self.reset = reset
+
+    def forward(self, g, labels, mask=None):
+        r"""Compute the label propagation process.
+
+        Parameters
+        ----------
+        g : DGLGraph
+            The input graph.
+        labels : torch.Tensor
+            The input node labels. There are three cases supported.
+
+            * A LongTensor of shape :math:`(N, 1)` or :math:`(N,)` for node class labels in
+              multiclass classification, where :math:`N` is the number of nodes.
+            * A LongTensor of shape :math:`(N, C)` for one-hot encoding of node class labels
+              in multiclass classification, where :math:`C` is the number of classes.
+            * A LongTensor of shape :math:`(N, L)` for node labels in multilabel binary
+              classification, where :math:`L` is the number of labels.
+        mask : torch.Tensor
+            The bool indicators of shape :math:`(N,)` with True denoting labeled nodes.
+            Default: None, indicating all nodes are labeled.
+
+        Returns
+        -------
+        torch.Tensor
+            The propagated node labels of shape :math:`(N, D)` with float type, where :math:`D`
+            is the number of classes or labels.
+        """
+        with g.local_scope():
+            # multi-label / multi-class
+            if len(labels.size()) > 1 and labels.size(1) > 1:
+                labels = labels.to(th.float32)
+            # single-label multi-class
+            else:
+                labels = F.one_hot(labels.view(-1)).to(th.float32)
+
+            y = labels
+            if mask is not None:
+                y = th.zeros_like(labels)
+                y[mask] = labels[mask]
+
+            init = (1 - self.alpha) * y
+            in_degs = g.in_degrees().float().clamp(min=1)
+            out_degs = g.out_degrees().float().clamp(min=1)
+            if self.norm_type == "sym":
+                norm_i = th.pow(in_degs, -0.5).to(labels.device).unsqueeze(1)
+                norm_j = th.pow(out_degs, -0.5).to(labels.device).unsqueeze(1)
+            elif self.norm_type == "row":
+                norm_i = th.pow(in_degs, -1.0).to(labels.device).unsqueeze(1)
+            else:
+                raise ValueError(
+                    f"Expect norm_type to be 'sym' or 'row', got {self.norm_type}"
+                )
+
+            for _ in range(self.k):
+                g.ndata["h"] = y * norm_j if self.norm_type == "sym" else y
+                g.update_all(fn.copy_u("h", "m"), fn.sum("m", "h"))
+                y = init + self.alpha * g.ndata["h"] * norm_i
+
+                if self.clamp:
+                    y = y.clamp_(0.0, 1.0)
+                if self.normalize:
+                    y = F.normalize(y, p=1)
+                if self.reset:
+                    y[mask] = labels[mask]
+
+            return y

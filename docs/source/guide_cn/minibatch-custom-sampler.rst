@@ -141,20 +141,20 @@ DGL提供了 :func:`dgl.to_block` 以将任何边界转换为块。其中第一�
     block = dgl.to_block(frontier, output_nodes)
 
 要查找给定节点类型的输入节点和输出节点的数量，可以使用
-:meth:`dgl.DGLHeteroGraph.number_of_src_nodes`  和
-:meth:`dgl.DGLHeteroGraph.number_of_dst_nodes` 方法。
+:meth:`dgl.DGLGraph.number_of_src_nodes`  和
+:meth:`dgl.DGLGraph.number_of_dst_nodes` 方法。
 
 .. code:: python
 
     num_input_nodes, num_output_nodes = block.number_of_src_nodes(), block.number_of_dst_nodes()
     print(num_input_nodes, num_output_nodes)
 
-可以通过 :attr:`dgl.DGLHeteroGraph.srcdata` 和
-:attr:`dgl.DGLHeteroGraph.srcnodes` 访问该块的输入节点特征，
-并且可以通过 :attr:`dgl.DGLHeteroGraph.dstdata` 和
-:attr:`dgl.DGLHeteroGraph.dstnodes` 访问其输出节点特征。
+可以通过 :attr:`dgl.DGLGraph.srcdata` 和
+:attr:`dgl.DGLGraph.srcnodes` 访问该块的输入节点特征，
+并且可以通过 :attr:`dgl.DGLGraph.dstdata` 和
+:attr:`dgl.DGLGraph.dstnodes` 访问其输出节点特征。
 ``srcdata``/``dstdata`` 和 ``srcnodes``/``dstnodes``
-的语法与常规图中的 :attr:`dgl.DGLHeteroGraph.ndata` 和 :attr:`dgl.DGLHeteroGraph.nodes` 相同。
+的语法与常规图中的 :attr:`dgl.DGLGraph.ndata` 和 :attr:`dgl.DGLGraph.nodes` 相同。
 
 .. code:: python
 
@@ -321,7 +321,7 @@ DGL确保块的输出节点将始终出现在输入节点中。如下代码所�
             src = src[mask]
             dst = dst[mask]
             # 返回一个与初始图有相同节点的边界
-            frontier = dgl.graph((src, dst), num_nodes=g.number_of_nodes())
+            frontier = dgl.graph((src, dst), num_nodes=g.num_nodes())
             return frontier
     
         def __len__(self):
@@ -376,7 +376,7 @@ DGL确保块的输出节点将始终出现在输入节点中。如下代码所�
             new_edges_masks = {}
             # 遍历所有边的类型
             for etype in sg.canonical_etypes:
-                edge_mask = torch.zeros(sg.number_of_edges(etype))
+                edge_mask = torch.zeros(sg.num_edges(etype))
                 edge_mask.bernoulli_(self.p)
                 new_edges_masks[etype] = edge_mask.bool()
     

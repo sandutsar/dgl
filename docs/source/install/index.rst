@@ -5,11 +5,13 @@ System requirements
 -------------------
 DGL works with the following operating systems:
 
-* Ubuntu 16.04
+* Ubuntu 20.04+
+* CentOS 8+
+* RHEL 8+
 * macOS X
 * Windows 10
 
-DGL requires Python version 3.6, 3.7, 3.8 or 3.9.
+DGL requires Python version 3.7, 3.8, 3.9, 3.10, 3.11.
 
 DGL supports multiple tensor libraries as backends, e.g., PyTorch, MXNet. For requirements on backends and how to select one, see :ref:`backends`.
 
@@ -60,32 +62,51 @@ For Fedora/RHEL/CentOS users, run:
 
    sudo yum install -y gcc-c++ python3-devel make cmake
 
-Build the shared library. Use the configuration template ``cmake/config.cmake``.
-Copy it to either the project directory or the build directory and change the
-configuration as you wish. For example, change ``USE_CUDA`` to ``ON`` will
-enable a CUDA build. You could also pass ``-DKEY=VALUE`` to the cmake command
-for the same purpose.
+To create a Conda environment for CPU development, run:
 
-* CPU-only build::
+.. code:: bash
 
-     mkdir build
-     cd build
-     cmake ..
-     make -j4
+   bash script/create_dev_conda_env.sh -c
 
-* CUDA build::
+To create a Conda environment for GPU development, run:
 
-     mkdir build
-     cd build
-     cmake -DUSE_CUDA=ON ..
-     make -j4
+.. code:: bash
+
+   bash script/create_dev_conda_env.sh -g 11.7
+
+
+To further configure the conda environment, run the following command for more details:
+
+.. code:: bash
+
+   bash script/create_dev_conda_env.sh -h
+
+To build the shared library for CPU development, run:
+
+.. code:: bash
+
+   bash script/build_dgl.sh -c
+
+To build the shared library for GPU development, run:
+
+.. code:: bash
+
+   bash script/build_dgl.sh -g
+
+To further build the shared library, run the following command for more details:
+
+.. code:: bash
+
+   bash script/build_dgl.sh -h
 
 Finally, install the Python binding.
 
 .. code:: bash
 
-   cd ../python
+   cd python
    python setup.py install
+   # Build Cython extension
+   python setup.py build_ext --inplace
 
 macOS
 `````
@@ -115,10 +136,12 @@ install the Python binding for DGL.
 
    mkdir build
    cd build
-   cmake -DUSE_OPENMP=off -DCMAKE_C_FLAGS='-DXBYAK_DONT_USE_MAP_JIT' -DCMAKE_CXX_FLAGS='-DXBYAK_DONT_USE_MAP_JIT' -DUSE_AVX=OFF -DUSE_LIBXSMM=OFF ..
+   cmake -DUSE_OPENMP=off -DUSE_LIBXSMM=OFF ..
    make -j4
    cd ../python
    python setup.py install
+   # Build Cython extension
+   python setup.py build_ext --inplace
 
 Windows
 ```````
@@ -145,11 +168,6 @@ in VS2019 x64 Native tools command prompt.
      CD ..\python
      python setup.py install
 
-Compilation Flags
-`````````````````
-
-See `config.cmake <https://github.com/dmlc/dgl/blob/master/cmake/config.cmake>`_.
-
 
 .. _backends:
 
@@ -174,13 +192,13 @@ PyTorch backend
 ```````````````
 
 Export ``DGLBACKEND`` as ``pytorch`` to specify PyTorch backend. The required PyTorch
-version is 1.5.0 or later. See `pytorch.org <https://pytorch.org>`_ for installation instructions.
+version is 1.12.0 or later. See `pytorch.org <https://pytorch.org>`_ for installation instructions.
 
 MXNet backend
 `````````````
 
 Export ``DGLBACKEND`` as ``mxnet`` to specify MXNet backend. The required MXNet version is
-1.5 or later. See `mxnet.apache.org <https://mxnet.apache.org/get_started>`_ for installation
+1.6 or later. See `mxnet.apache.org <https://mxnet.apache.org/get_started>`_ for installation
 instructions.
 
 MXNet uses uint32 as the default data type for integer tensors, which only supports graph of
@@ -196,10 +214,6 @@ Tensorflow backend
 ``````````````````
 
 Export ``DGLBACKEND`` as ``tensorflow`` to specify Tensorflow backend. The required Tensorflow
-version is 2.2.0 or later. See `tensorflow.org <https://www.tensorflow.org/install>`_ for installation
+version is 2.3.0 or later. See `tensorflow.org <https://www.tensorflow.org/install>`_ for installation
 instructions. In addition, DGL will set ``TF_FORCE_GPU_ALLOW_GROWTH`` to ``true`` to prevent Tensorflow take over the whole GPU memory:
-
-.. code:: bash
-
-   pip install "tensorflow>=2.2.0"  # when using tensorflow cpu version
 

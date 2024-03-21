@@ -1,12 +1,13 @@
 """Define sparse embedding and optimizer."""
 
 import torch as th
-from .... import backend as F
-from .... import utils
+
+from .... import backend as F, utils
 from ...dist_tensor import DistTensor
 
+
 class DistEmbedding:
-    '''Distributed node embeddings.
+    """Distributed node embeddings.
 
     DGL provides a distributed embedding to support models that require learnable embeddings.
     DGL's distributed embeddings are mainly used for learning node embeddings of graph models.
@@ -16,11 +17,11 @@ class DistEmbedding:
 
     To support efficient training on a graph with many nodes, the embeddings support sparse
     updates. That is, only the embeddings involved in a mini-batch computation are updated.
-    Currently, DGL provides only one optimizer: `SparseAdagrad`. DGL will provide more
-    optimizers in the future.
+    Please refer to `Distributed Optimizers <https://docs.dgl.ai/api/python/dgl.distributed.html#
+    distributed-embedding-optimizer>`__ for available optimizers in DGL.
 
     Distributed embeddings are sharded and stored in a cluster of machines in the same way as
-    py:meth:`dgl.distributed.DistTensor`, except that distributed embeddings are trainable.
+    :class:`dgl.distributed.DistTensor`, except that distributed embeddings are trainable.
     Because distributed embeddings are sharded
     in the same way as nodes and edges of a distributed graph, it is usually much more
     efficient to access than the sparse embeddings provided by the deep learning frameworks.
@@ -49,7 +50,7 @@ class DistEmbedding:
             arr = th.zeros(shape, dtype=dtype)
             arr.uniform_(-1, 1)
             return arr
-    >>> emb = dgl.distributed.DistEmbedding(g.number_of_nodes(), 10, init_func=initializer)
+    >>> emb = dgl.distributed.DistEmbedding(g.num_nodes(), 10, init_func=initializer)
     >>> optimizer = dgl.distributed.optim.SparseAdagrad([emb], lr=0.001)
     >>> for blocks in dataloader:
     ...     feats = emb(nids)
@@ -59,15 +60,27 @@ class DistEmbedding:
 
     Note
     ----
-    When a ``DistEmbedding``  object is used when the deep learning framework is recording
-    the forward computation, users have to invoke
-    py:meth:`~dgl.distributed.optim.SparseAdagrad.step` afterwards. Otherwise, there will be
-    some memory leak.
-    '''
-    def __init__(self, num_embeddings, embedding_dim, name=None,
-                 init_func=None, part_policy=None):
-        self._tensor = DistTensor((num_embeddings, embedding_dim), F.float32, name,
-                                  init_func=init_func, part_policy=part_policy)
+    When a ``DistEmbedding``  object is used in the forward computation, users
+    have to invoke
+    :py:meth:`~dgl.distributed.optim.SparseAdagrad.step` afterwards. Otherwise,
+    there will be some memory leak.
+    """
+
+    def __init__(
+        self,
+        num_embeddings,
+        embedding_dim,
+        name=None,
+        init_func=None,
+        part_policy=None,
+    ):
+        self._tensor = DistTensor(
+            (num_embeddings, embedding_dim),
+            F.float32,
+            name,
+            init_func=init_func,
+            part_policy=part_policy,
+        )
         self._trace = []
         self._name = name
         self._num_embeddings = num_embeddings
@@ -77,12 +90,14 @@ class DistEmbedding:
         if th.distributed.is_initialized():
             self._rank = th.distributed.get_rank()
             self._world_size = th.distributed.get_world_size()
-        else:
-            assert 'th.distributed shoud be initialized'
-        self._optm_state = None # track optimizer state
+        # [TODO] The following code is clearly wrong but changing it to "raise DGLError"
+        # actually fails unit test.  ???
+        # else:
+        #     assert 'th.distributed should be initialized'
+        self._optm_state = None  # track optimizer state
         self._part_policy = part_policy
 
-    def __call__(self, idx, device=th.device('cpu')):
+    def __call__(self, idx, device=th.device("cpu")):
         """
         node_ids : th.tensor
             Index of the embeddings to collect.
@@ -102,8 +117,7 @@ class DistEmbedding:
         return emb
 
     def reset_trace(self):
-        '''Reset the traced data.
-        '''
+        """Reset the traced data."""
         self._trace = []
 
     @property
@@ -127,6 +141,17 @@ class DistEmbedding:
             The name of the embeddings
         """
         return self._tensor.tensor_name
+
+    @property
+    def data_name(self):
+        """Return the data name of the embeddings
+
+        Returns
+        -------
+        str
+            The data name of the embeddings
+        """
+        return self._tensor._name
 
     @property
     def kvstore(self):

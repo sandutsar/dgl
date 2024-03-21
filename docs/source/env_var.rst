@@ -7,6 +7,10 @@ Global Configurations
     * Values: String (default=``"${HOME}/.dgl"``)
     * The directory to save the DGL configuration files.
 
+* ``DGL_LOG_DEBUG``:
+    * Values: Set to ``"1"`` to enable debug level logging for DGL
+    * Enable debug level logging for DGL
+
 Backend Options
 ---------------
 * ``DGLBACKEND``:
@@ -28,15 +32,3 @@ Data Repository
 * ``DGL_DOWNLOAD_DIR``:
     * Values: String (default=``"${HOME}/.dgl"``)
     * The local directory to cache the downloaded data.
-
-Intel CPU Performance Options
----------------
-* ``DGL_CPU_INTEL_KERNEL_ENABLED``:
-    * Values: int (default='0')
-    * Use dynamic cpu kernels.
-    * Suggested values: 1
-
-* ``DGL_CPU_INTEL_KERNEL_LOG``:
-    * Values: int (default='0')
-    * Show diagnostic message (debug mode).
-    * Suggested values: 1

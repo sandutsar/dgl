@@ -9,38 +9,59 @@ and transforming graphs.
 # This initializes Winsock and performs cleanup at termination as required
 import socket
 
-# Should import backend before importing anything else
-from .backend import load_backend, backend_name
+# Backend and logging should be imported before other modules.
+from .logging import enable_verbose_logging  # usort: skip
+from .backend import backend_name, load_backend  # usort: skip
 
-from . import function
-from . import contrib
-from . import container
-from . import distributed
-from . import random
-from . import sampling
-from . import dataloading
-from . import ops
-from . import cuda
+from . import (
+    container,
+    cuda,
+    dataloading,
+    function,
+    ops,
+    random,
+    sampling,
+    storages,
+)
+from ._ffi.base import __version__, DGLError
+from ._ffi.function import (
+    extract_ext_funcs,
+    get_global_func,
+    list_global_func_names,
+    register_func,
+)
 
 from ._ffi.runtime_ctypes import TypeCode
-from ._ffi.function import register_func, get_global_func, list_global_func_names, extract_ext_funcs
-from ._ffi.base import DGLError, __version__
 
-from .base import ALL, NTYPE, NID, ETYPE, EID
+from .base import ALL, EID, ETYPE, NID, NTYPE
 from .readout import *
 from .batch import *
 from .convert import *
 from .generators import *
-from .heterograph import DGLHeteroGraph
-from .heterograph import DGLHeteroGraph as DGLGraph  # pylint: disable=reimported
+from .dataloading import (
+    set_dst_lazy_features,
+    set_edge_lazy_features,
+    set_node_lazy_features,
+    set_src_lazy_features,
+)
+from .heterograph import (  # pylint: disable=reimported
+    DGLGraph,
+    DGLGraph as DGLHeteroGraph,
+)
 from .merge import *
 from .subgraph import *
 from .traversal import *
-from .transform import *
+from .transforms import *
 from .propagate import *
 from .random import *
-from .data.utils import save_graphs, load_graphs
 from . import optim
+from .data.utils import load_graphs, save_graphs
+from .frame import LazyFeature
+from .global_config import is_libxsmm_enabled, use_libxsmm
+from .utils import apply_each
+from .mpops import *
+from .homophily import *
+from .label_informativeness import *
 
-from ._deprecate.graph import DGLGraph as DGLGraphStale
-from ._deprecate.nodeflow import *
+if backend_name == "pytorch":
+    from . import distributed

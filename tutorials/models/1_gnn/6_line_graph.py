@@ -17,24 +17,24 @@ Line Graph Neural Network
 """
 
 ###########################################################################################
-# 
+#
 # In this tutorial, you learn how to solve community detection tasks by implementing a line
 # graph neural network (LGNN). Community detection, or graph clustering, consists of partitioning
 # the vertices in a graph into clusters in which nodes are more similar to
 # one another.
-# 
+#
 # In the :doc:`Graph convolutinal network tutorial <1_gcn>`, you learned how to classify the nodes of an input
 # graph in a semi-supervised setting. You used a graph convolutional neural network (GCN)
 # as an embedding mechanism for graph features.
-# 
-# To generalize a graph neural network (GNN) into supervised community detection, a line-graph based 
-# variation of GNN is introduced in the research paper 
-# `Supervised Community Detection with Line Graph Neural Networks <https://arxiv.org/abs/1705.08415>`__. 
+#
+# To generalize a graph neural network (GNN) into supervised community detection, a line-graph based
+# variation of GNN is introduced in the research paper
+# `Supervised Community Detection with Line Graph Neural Networks <https://arxiv.org/abs/1705.08415>`__.
 # One of the highlights of the model is
 # to augment the straightforward GNN architecture so that it operates on
 # a line graph of edge adjacencies, defined with a non-backtracking operator.
 #
-# A line graph neural network (LGNN) shows how DGL can implement an advanced graph algorithm by 
+# A line graph neural network (LGNN) shows how DGL can implement an advanced graph algorithm by
 # mixing basic tensor operations, sparse-matrix multiplication, and message-
 # passing APIs.
 #
@@ -65,13 +65,13 @@ Line Graph Neural Network
 #
 # Cora dataset
 # ~~~~~
-# To be consistent with the GCN tutorial, 
-# you use the `Cora dataset <https://linqs.soe.ucsc.edu/data>`__ 
-# to illustrate a simple community detection task. Cora is a scientific publication dataset, 
-# with 2708 papers belonging to seven  
-# different machine learning fields. Here, you formulate Cora as a 
-# directed graph, with each node being a paper, and each edge being a 
-# citation link (A->B means A cites B). Here is a visualization of the whole 
+# To be consistent with the GCN tutorial,
+# you use the `Cora dataset <https://linqs.soe.ucsc.edu/data>`__
+# to illustrate a simple community detection task. Cora is a scientific publication dataset,
+# with 2708 papers belonging to seven
+# different machine learning fields. Here, you formulate Cora as a
+# directed graph, with each node being a paper, and each edge being a
+# citation link (A->B means A cites B). Here is a visualization of the whole
 # Cora dataset.
 #
 # .. figure:: https://i.imgur.com/X404Byc.png
@@ -86,18 +86,20 @@ Line Graph Neural Network
 # The following code snippet verifies that there are more intra-class edges
 # than inter-class.
 
+import os
+
+os.environ["DGLBACKEND"] = "pytorch"
+import dgl
 import torch
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-
-import dgl
 from dgl.data import citation_graph as citegrh
 
 data = citegrh.load_cora()
 
-G = dgl.DGLGraph(data.graph)
-labels = th.tensor(data.labels)
+G = data[0]
+labels = th.tensor(G.ndata["label"])
 
 # find all the nodes labeled with class 0
 label0_nodes = th.nonzero(labels == 0, as_tuple=False).squeeze()
@@ -106,14 +108,16 @@ src, _ = G.in_edges(label0_nodes)
 src_labels = labels[src]
 # find all the edges whose both endpoints are in class 0
 intra_src = th.nonzero(src_labels == 0, as_tuple=False)
-print('Intra-class edges percent: %.4f' % (len(intra_src) / len(src_labels)))
+print("Intra-class edges percent: %.4f" % (len(intra_src) / len(src_labels)))
+
+import matplotlib.pyplot as plt
 
 ###########################################################################################
 # Binary community subgraph from Cora with a test dataset
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Without loss of generality, in this tutorial you limit the scope of the
 # task to binary community detection.
-# 
+#
 # .. note::
 #
 #    To create a practice binary-community dataset from Cora, first extract
@@ -125,19 +129,30 @@ print('Intra-class edges percent: %.4f' % (len(intra_src) / len(src_labels)))
 # With the following code, you can visualize one of the training samples and its community structure.
 
 import networkx as nx
-import matplotlib.pyplot as plt
 
 train_set = dgl.data.CoraBinary()
 G1, pmpd1, label1 = train_set[1]
 nx_G1 = G1.to_networkx()
 
+
 def visualize(labels, g):
     pos = nx.spring_layout(g, seed=1)
     plt.figure(figsize=(8, 8))
-    plt.axis('off')
-    nx.draw_networkx(g, pos=pos, node_size=50, cmap=plt.get_cmap('coolwarm'),
-                     node_color=labels, edge_color='k',
-                     arrows=False, width=0.5, style='dotted', with_labels=False)
+    plt.axis("off")
+    nx.draw_networkx(
+        g,
+        pos=pos,
+        node_size=50,
+        cmap=plt.get_cmap("coolwarm"),
+        node_color=labels,
+        edge_color="k",
+        arrows=False,
+        width=0.5,
+        style="dotted",
+        with_labels=False,
+    )
+
+
 visualize(label1, nx_G1)
 
 ###########################################################################################
@@ -177,7 +192,7 @@ visualize(label1, nx_G1)
 #    community assignment :math:`\{A, A, A, B\}`, with each node's label
 #    :math:`l \in \{0,1\}`,The group of all possible permutations
 #    :math:`S_c = \{\{0,0,0,1\}, \{1,1,1,0\}\}`.
-# 
+#
 # Line graph neural network key ideas
 # ------------------------------------
 # An key innovation in this topic is the use of a line graph.
@@ -193,7 +208,7 @@ visualize(label1, nx_G1)
 # Specifically, a line-graph :math:`L(G)` turns an edge of the original graph `G`
 # into a node. This is illustrated with the graph below (taken from the
 # research paper).
-# 
+#
 # .. figure:: https://i.imgur.com/4WO5jEm.png
 #    :alt: lg
 #    :align: center
@@ -206,11 +221,11 @@ visualize(label1, nx_G1)
 # connect two edges? Here, we use the following connection rule:
 #
 # Two nodes :math:`v^{l}_{A}`, :math:`v^{l}_{B}` in `lg` are connected if
-# the corresponding two edges :math:`e_{A}, e_{B}` in `g` share one and only 
+# the corresponding two edges :math:`e_{A}, e_{B}` in `g` share one and only
 # one node:
 # :math:`e_{A}`'s destination node is :math:`e_{B}`'s source node
 # (:math:`j`).
-# 
+#
 # .. note::
 #
 #    Mathematically, this definition corresponds to a notion called non-backtracking
@@ -228,7 +243,7 @@ visualize(label1, nx_G1)
 # LGNN chains together a series of line graph neural network layers. The graph
 # representation :math:`x` and its line graph companion :math:`y` evolve with
 # the dataflow as follows.
-# 
+#
 # .. figure:: https://i.imgur.com/bZGGIGp.png
 #    :alt: alg
 #    :align: center
@@ -265,9 +280,9 @@ visualize(label1, nx_G1)
 #
 # Implement LGNN in DGL
 # ---------------------
-# Even though the equations in the previous section might seem intimidating, 
+# Even though the equations in the previous section might seem intimidating,
 # it helps to understand the following information before you implement the LGNN.
-# 
+#
 # The two equations are symmetric and can be implemented as two instances
 # of the same class with different parameters.
 # The first equation operates on graph representation :math:`x`,
@@ -295,7 +310,7 @@ visualize(label1, nx_G1)
 # Each of the terms are performed again with different
 # parameters, and without the nonlinearity after the sum.
 # Therefore, :math:`f` could be written as:
-# 
+#
 #   .. math::
 #      \begin{split}
 #      f(x^{(k)},y^{(k)}) = {}\rho[&\text{prev}(x^{(k-1)}) + \text{deg}(x^{(k-1)}) +\text{radius}(x^{k-1})
@@ -304,18 +319,18 @@ visualize(label1, nx_G1)
 #      \end{split}
 #
 # Two equations are chained-up in the following order:
-# 
+#
 #   .. math::
 #      \begin{split}
 #      x^{(k+1)} = {}& f(x^{(k)}, y^{(k)})\\
 #      y^{(k+1)} = {}& f(y^{(k)}, x^{(k+1)})
 #      \end{split}
-# 
+#
 # Keep in mind the listed observations in this overview and proceed to implementation.
 # An important point is that you use different strategies for the noted terms.
-# 
+#
 # .. note::
-#    You can understand :math:`\{Pm, Pd\}` more thoroughly with this explanation. 
+#    You can understand :math:`\{Pm, Pd\}` more thoroughly with this explanation.
 #    Roughly speaking, there is a relationship between how :math:`g` and
 #    :math:`lg` (the line graph) work together with loopy brief propagation.
 #    Here, you implement :math:`\{Pm, Pd\}` as a SciPy COO sparse matrix in the dataset,
@@ -329,21 +344,21 @@ visualize(label1, nx_G1)
 # multiplication. Write them as PyTorch tensor operations.
 #
 # In ``__init__``, you define the projection variables.
-# 
+#
 # ::
-# 
+#
 #    self.linear_prev = nn.Linear(in_feats, out_feats)
 #    self.linear_deg = nn.Linear(in_feats, out_feats)
-# 
+#
 #
 # In ``forward()``, :math:`\text{prev}` and :math:`\text{deg}` are the same
 # as any other PyTorch tensor operations.
-# 
+#
 # ::
-# 
+#
 #    prev_proj = self.linear_prev(feat_a)
 #    deg_proj = self.linear_deg(deg * feat_a)
-# 
+#
 # Implementing :math:`\text{radius}` as message passing in DGL
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # As discussed in GCN tutorial, you can formulate one adjacency operator as
@@ -355,31 +370,34 @@ visualize(label1, nx_G1)
 #
 # In ``__init__``, define the projection variables used in each
 # :math:`2^j` steps of message passing.
-# 
+#
 # ::
-# 
+#
 #   self.linear_radius = nn.ModuleList(
 #           [nn.Linear(in_feats, out_feats) for i in range(radius)])
 #
 # In ``__forward__``, use following function ``aggregate_radius()`` to
-# gather data from multiple hops. This can be seen in the following code. 
+# gather data from multiple hops. This can be seen in the following code.
 # Note that the ``update_all`` is called multiple times.
 
 # Return a list containing features gathered from multiple radius.
 import dgl.function as fn
+
+
 def aggregate_radius(radius, g, z):
     # initializing list to collect message passing result
     z_list = []
-    g.ndata['z'] = z
+    g.ndata["z"] = z
     # pulling message from 1-hop neighbourhood
-    g.update_all(fn.copy_src(src='z', out='m'), fn.sum(msg='m', out='z'))
-    z_list.append(g.ndata['z'])
+    g.update_all(fn.copy_u(u="z", out="m"), fn.sum(msg="m", out="z"))
+    z_list.append(g.ndata["z"])
     for i in range(radius - 1):
-        for j in range(2 ** i):
-            #pulling message from 2^j neighborhood
-            g.update_all(fn.copy_src(src='z', out='m'), fn.sum(msg='m', out='z'))
-        z_list.append(g.ndata['z'])
+        for j in range(2**i):
+            # pulling message from 2^j neighborhood
+            g.update_all(fn.copy_u(u="z", out="m"), fn.sum(msg="m", out="z"))
+        z_list.append(g.ndata["z"])
     return z_list
+
 
 #########################################################################
 # Implementing :math:`\text{fuse}` as sparse matrix multiplication
@@ -389,32 +407,32 @@ def aggregate_radius(radius, g, z):
 # and implement :math:`\text{fuse}` as a sparse matrix multiplication.
 #
 # in ``__forward__``:
-# 
+#
 # ::
-# 
+#
 #   fuse = self.linear_fuse(th.mm(pm_pd, feat_b))
 #
 # Completing :math:`f(x, y)`
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Finally, the following shows how to sum up all the terms together, pass it to skip connection, and
 # batch norm.
-# 
+#
 # ::
 #
 #   result = prev_proj + deg_proj + radius_proj + fuse
-# 
-# Pass result to skip connection. 
-# 
+#
+# Pass result to skip connection.
+#
 # ::
-# 
+#
 #   result = th.cat([result[:, :n], F.relu(result[:, n:])], 1)
-# 
+#
 # Then pass the result to batch norm.
-# 
+#
 # ::
-# 
+#
 #   result = self.bn(result) #Batch Normalization.
-# 
+#
 #
 # Here is the complete code for one LGNN layer's abstraction :math:`f(x,y)`
 class LGNNCore(nn.Module):
@@ -426,7 +444,8 @@ class LGNNCore(nn.Module):
         self.linear_prev = nn.Linear(in_feats, out_feats)
         self.linear_deg = nn.Linear(in_feats, out_feats)
         self.linear_radius = nn.ModuleList(
-                [nn.Linear(in_feats, out_feats) for i in range(radius)])
+            [nn.Linear(in_feats, out_feats) for i in range(radius)]
+        )
         self.linear_fuse = nn.Linear(in_feats, out_feats)
         self.bn = nn.BatchNorm1d(out_feats)
 
@@ -440,7 +459,9 @@ class LGNNCore(nn.Module):
         # aggregate 2^j-hop features
         hop2j_list = aggregate_radius(self.radius, g, feat_a)
         # apply linear transformation
-        hop2j_list = [linear(x) for linear, x in zip(self.linear_radius, hop2j_list)]
+        hop2j_list = [
+            linear(x) for linear, x in zip(self.linear_radius, hop2j_list)
+        ]
         radius_proj = sum(hop2j_list)
 
         # term "fuse"
@@ -456,11 +477,12 @@ class LGNNCore(nn.Module):
 
         return result
 
+
 ##############################################################################################################
 # Chain-up LGNN abstractions as an LGNN layer
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # To implement:
-# 
+#
 # .. math::
 #    \begin{split}
 #    x^{(k+1)} = {}& f(x^{(k)}, y^{(k)})\\
@@ -479,6 +501,7 @@ class LGNNLayer(nn.Module):
         pm_pd_y = th.transpose(pm_pd, 0, 1)
         next_lg_x = self.lg_layer(lg, lg_x, x, deg_lg, pm_pd_y)
         return next_x, next_lg_x
+
 
 ########################################################################################
 # Chain-up LGNN layers
@@ -502,15 +525,17 @@ class LGNN(nn.Module):
         x, lg_x = self.layer2(g, lg, x, lg_x, deg_g, deg_lg, pm_pd)
         x, lg_x = self.layer3(g, lg, x, lg_x, deg_g, deg_lg, pm_pd)
         return self.linear(x)
+
+
 #########################################################################################
 # Training and inference
 # -----------------------
 # First load the data.
 from torch.utils.data import DataLoader
-training_loader = DataLoader(train_set,
-                             batch_size=1,
-                             collate_fn=train_set.collate_fn,
-                             drop_last=True)
+
+training_loader = DataLoader(
+    train_set, batch_size=1, collate_fn=train_set.collate_fn, drop_last=True
+)
 
 #######################################################################################
 # Next, define the main training loop. Note that each training sample contains
@@ -518,7 +543,7 @@ training_loader = DataLoader(train_set,
 # array in ``numpy.ndarray``. Generate the line graph by using this command:
 #
 # ::
-# 
+#
 #   lg = g.line_graph(backtracking=False)
 #
 # Note that ``backtracking=False`` is required to correctly simulate non-backtracking
@@ -534,8 +559,11 @@ optimizer = th.optim.Adam(model.parameters(), lr=1e-2)
 def sparse2th(mat):
     value = mat.data
     indices = th.LongTensor([mat.row, mat.col])
-    tensor = th.sparse.FloatTensor(indices, th.from_numpy(value).float(), mat.shape)
+    tensor = th.sparse.FloatTensor(
+        indices, th.from_numpy(value).float(), mat.shape
+    )
     return tensor
+
 
 # Train for 20 epochs
 for i in range(20):
@@ -547,7 +575,7 @@ for i in range(20):
         # Create torch tensors
         pmpd = sparse2th(pmpd)
         label = th.from_numpy(label)
-        
+
         # Forward
         z = model(g, lg, pmpd)
 
@@ -569,11 +597,11 @@ for i in range(20):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
     niters = len(all_loss)
-    print("Epoch %d | loss %.4f | accuracy %.4f" % (i,
-        sum(all_loss) / niters, sum(all_acc) / niters))
-
+    print(
+        "Epoch %d | loss %.4f | accuracy %.4f"
+        % (i, sum(all_loss) / niters, sum(all_acc) / niters)
+    )
 #######################################################################################
 # Visualize training progress
 # -----------------------------
@@ -594,7 +622,7 @@ visualize(label1, nx_G1)
 #########################################
 # Here is an animation to better understand the process. (40 epochs)
 #
-# .. figure:: https://i.imgur.com/KDUyE1S.gif 
+# .. figure:: https://i.imgur.com/KDUyE1S.gif
 #    :alt: lgnn-anim
 #
 # Batching graphs for parallelism
@@ -611,6 +639,7 @@ visualize(label1, nx_G1)
 # :math`\{Pm,Pd\}` as block diagonal matrix in correspondence to DGL batched
 # graph API.
 
+
 def collate_fn(batch):
     graphs, pmpds, labels = zip(*batch)
     batched_graphs = dgl.batch(graphs)
@@ -618,6 +647,7 @@ def collate_fn(batch):
     batched_labels = np.concatenate(labels, axis=0)
     return batched_graphs, batched_pmpds, batched_labels
 
+
 ######################################################################################
-# You can find the complete code on Github at 
+# You can find the complete code on Github at
 # `Community Detection with Graph Neural Networks (CDGNN) <https://github.com/dmlc/dgl/tree/master/examples/pytorch/line_graph>`_.

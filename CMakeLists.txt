@@ -1,63 +1,149 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.18)
 ########################################
 # Borrowed and adapted from TVM project
 ########################################
 project(dgl C CXX)
 message(STATUS "Start configuring project ${PROJECT_NAME}")
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # cmake utils
 include(cmake/util/Util.cmake)
 include(cmake/util/MshadowUtil.cmake)
 include(cmake/util/FindCUDA.cmake)
 
-if(EXISTS ${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
-  include(${CMAKE_CURRENT_BINARY_DIR}/config.cmake)
-else()
-  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/config.cmake)
-  endif()
+# Options for building DGL.
+# NOTE: Please avoid editing this file to change build type. Instead, using
+# bash script/build_dgl.sh -e -t release to overwrite the value.
+dgl_option(BUILD_TYPE "Type of the build: dev, dogfood or release" "dev")
+message(STATUS "Build for ${BUILD_TYPE}")
+
+dgl_option(USE_CUDA "Build with CUDA" OFF)
+dgl_option(TORCH_PYTHON_INTERPS "Python interpreter for building sub-components" python3)
+
+# Conda build related options.
+dgl_option(EXTERNAL_DLPACK_PATH "Path to external dlpack" OFF)
+dgl_option(EXTERNAL_DMLC_PATH "Path to external dmlc-core" OFF)
+dgl_option(EXTERNAL_DMLC_LIB_PATH "Path to external dmlc-core library" OFF)
+dgl_option(EXTERNAL_PHMAP_PATH "Path to external parallel-hashmap" OFF)
+dgl_option(EXTERNAL_NANOFLANN_PATH "Path to use external nanoflann" OFF)
+dgl_option(EXTERNAL_METIS_PATH "Path to external metis" OFF)
+dgl_option(EXTERNAL_METIS_LIB_PATH "Path to external metis library" OFF)
+dgl_option(EXTERNAL_GKLIB_PATH "Path to external gklib" OFF)
+
+# Options for building DGL features: "none," "dev," "dogfood," "release," and
+# "all."
+#    "none"  - The feature is OFF for all build types. This is used when
+#              disabling a feature.
+#    "dev"   - The feature is ON for dev build. The default build from source
+#              and the build for unit tests are using this build type.
+#  "dogfood" - The major function of this feature is done. The regression and
+#              benchmark framework are using this build type.
+#  "release" - The feature will be build for release.
+#    "all"   - The feature is ON for all build types. Equivalent to set ["dev"
+#              "dogfood" "release"].
+# NOTE: Please avoid editing this file to change feature options for a local
+# build. Instead, using bash script/build_dgl.sh -e '-DFEATURE_NAME=ON/OFF' to
+# overwrite the value.
+dgl_feature_option(
+    BUILD_SPARSE
+    "Build DGL sparse library"
+    "all"
+)
+dgl_feature_option(
+    BUILD_TORCH
+    "Build the PyTorch plugin"
+    "all"
+)
+dgl_feature_option(
+    USE_EPOLL
+    "Build with epoll for socket communicator"
+    "all"
+)
+dgl_feature_option(
+    USE_LIBXSMM
+    "Build with LIBXSMM library optimization"
+    "all"
+)
+dgl_feature_option(
+    USE_OPENMP
+    "Build with OpenMP"
+    "all"
+)
+
+dgl_feature_option(
+    BUILD_GRAPHBOLT
+    "Build Graphbolt library"
+    "all"
+)
+
+dgl_feature_option(
+    LIBCXX_ENABLE_PARALLEL_ALGORITHMS
+    "Enable the parallel algorithms library. This requires the PSTL to be available."
+    "none"
+)
+dgl_feature_option(
+    REBUILD_LIBXSMM
+    "Clean LIBXSMM build cache at every build"
+    "none"
+)
+dgl_feature_option(
+    USE_HDFS
+    "Build with HDFS support"
+    "none"
+) # Set env HADOOP_HDFS_HOME if needed
+dgl_feature_option(
+    USE_S3
+    "Build with S3 support"
+    "none"
+)
+
+# Only build C++ tests for unit testing purposes in dev build.
+dgl_feature_option(
+    BUILD_CPP_TEST
+    "Build cpp unittest executables"
+    "dev"
+)
+
+if (EXTERNAL_DLPACK_PATH OR EXTERNAL_DMLC_PATH OR EXTERNAL_NANOFLANN_PATH OR EXTERNAL_NANOFLANN_PATH OR EXTERNAL_METIS_PATH OR EXTERNAL_GKLIB_PATH)
+  message(STATUS "Using at least one external library")
+  set(USE_EXTERNAL_LIBS ON)
+  
+  if (BUILD_CPP_TEST)
+    message(FATAL_ERROR "Cannot build cpp unittests with external libraries")
+  endif(BUILD_CPP_TEST)
 endif()
 
-# NOTE: do not modify this file to change option values.
-# You can create a config.cmake at build folder
-# and add set(OPTION VALUE) to override these build options.
-# Alernatively, use cmake -DOPTION=VALUE through command-line.
-dgl_option(USE_CUDA "Build with CUDA" OFF)
-dgl_option(USE_NCCL "Build with NCCL support" OFF)
-dgl_option(USE_SYSTEM_NCCL "Build using system's NCCL library" OFF)
-dgl_option(USE_OPENMP "Build with OpenMP" ON)
-dgl_option(USE_AVX "Build with AVX optimization" ON)
-dgl_option(USE_LIBXSMM "Build with LIBXSMM library optimization" ON)
-dgl_option(USE_FP16 "Build with fp16 support to enable mixed precision training" OFF)
-dgl_option(USE_TVM "Build with TVM kernels" OFF)
-dgl_option(BUILD_CPP_TEST "Build cpp unittest executables" OFF)
-dgl_option(LIBCXX_ENABLE_PARALLEL_ALGORITHMS "Enable the parallel algorithms library. This requires the PSTL to be available." OFF)
-dgl_option(USE_S3 "Build with S3 support" OFF)
-dgl_option(USE_HDFS "Build with HDFS support" OFF) # Set env HADOOP_HDFS_HOME if needed
-dgl_option(REBUILD_LIBXSMM "Clean LIBXSMM build cache at every build" OFF) # Set env HADOOP_HDFS_HOME if needed
-dgl_option(USE_EPOLL "Build with epoll for socket communicator" OFF)
-dgl_option(TP_BUILD_LIBUV "Build libuv together with tensorpipe (only impacts Linux)" ON)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules)
 
-# Set debug compile option for gdb, only happens when -DCMAKE_BUILD_TYPE=DEBUG
-if (NOT MSVC)
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -O0 -g3 -ggdb")
-endif(NOT MSVC)
+# Set optimization options for different build types.
+if (${BUILD_TYPE} STREQUAL "dev")
+  if (MSVC)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Od")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Od")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O0 -g3 -ggdb")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O0 -g3 -ggdb")
+  endif()
+else()
+  if (MSVC)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /O2")
+  else()
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
+  endif()
+endif()
 
 if(USE_CUDA)
   message(STATUS "Build with CUDA support")
   project(dgl C CXX)
   include(cmake/modules/CUDA.cmake)
-  if ((CUDA_VERSION_MAJOR LESS 11) OR
-      ((CUDA_VERSION_MAJOR EQUAL 11) AND (CUDA_VERSION_MINOR EQUAL 0)))
-    # For cuda<11, use external CUB/Thrust library because CUB is not part of CUDA.
-    # For cuda==11.0, use external CUB/Thrust library because there is a bug in the
-    #   official CUB library which causes invalid device ordinal error for DGL. The bug
-    #   is fixed by https://github.com/NVIDIA/cub/commit/9143e47e048641aa0e6ddfd645bcd54ff1059939
-    #   in 11.1.
-    message(STATUS "Detected CUDA of version ${CUDA_VERSION}. Use external CUB/Thrust library.")
-    cuda_include_directories(BEFORE "${CMAKE_SOURCE_DIR}/third_party/thrust")
-    cuda_include_directories(BEFORE "${CMAKE_SOURCE_DIR}/third_party/cub")
-  endif()
+  message(STATUS "Use external CCCL library for a consistent API and performance.")
+  cuda_include_directories(BEFORE "${CMAKE_SOURCE_DIR}/third_party/cccl/thrust")
+  cuda_include_directories(BEFORE "${CMAKE_SOURCE_DIR}/third_party/cccl/cub")
+  cuda_include_directories(BEFORE "${CMAKE_SOURCE_DIR}/third_party/cccl/libcudacxx/include")
 endif(USE_CUDA)
 
 # initial variables
@@ -92,11 +178,8 @@ if(MSVC)
   endif()
 else(MSVC)
   include(CheckCXXCompilerFlag)
-  check_cxx_compiler_flag("-std=c++11"    SUPPORT_CXX11)
-  set(CMAKE_C_FLAGS "-O2 -Wall -fPIC ${CMAKE_C_FLAGS}")
-  # We still use c++11 flag in CPU build because gcc5.4 (our default compiler) is
-  # not fully compatible with c++14 feature.
-  set(CMAKE_CXX_FLAGS "-O2 -Wall -fPIC -std=c++11 ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_C_FLAGS "-Wall -fPIC ${CMAKE_C_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-Wall -fPIC ${CMAKE_CXX_FLAGS}")
   if(NOT APPLE)
     set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--warn-common ${CMAKE_SHARED_LINKER_FLAGS}")
   endif(NOT APPLE)
@@ -111,32 +194,27 @@ if(USE_OPENMP)
   message(STATUS "Build with OpenMP.")
 endif(USE_OPENMP)
 
-if(USE_AVX)
-  if(USE_LIBXSMM)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_AVX -DUSE_LIBXSMM -DDGL_CPU_LLC_SIZE=40000000")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_AVX -DUSE_LIBXSMM -DDGL_CPU_LLC_SIZE=40000000")
-    message(STATUS "Build with LIBXSMM optimization.")
-  else(USE_LIBXSMM)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_AVX")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_AVX")
-    message(STATUS "Build with AVX optimization.")
-  endif(USE_LIBXSMM)
-endif(USE_AVX)
+if(NOT CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)")
+  message(STATUS "Disabling LIBXSMM on ${CMAKE_SYSTEM_PROCESSOR}.")
+  set(USE_LIBXSMM OFF)
+endif()
 
-if (USE_EPOLL)
-  check_include_file("sys/epoll.h" USE_EPOLL)
-  if (USE_EPOLL)
+if(USE_LIBXSMM)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_LIBXSMM -DDGL_CPU_LLC_SIZE=40000000 -D__BLAS=0")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBXSMM -DDGL_CPU_LLC_SIZE=40000000 -D__BLAS=0")
+  message(STATUS "Build with LIBXSMM optimization.")
+endif(USE_LIBXSMM)
+
+if ((NOT MSVC) AND USE_EPOLL)
+  INCLUDE(CheckIncludeFile)
+  check_include_file("sys/epoll.h" EPOLL_AVAILABLE)
+  if (EPOLL_AVAILABLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_EPOLL")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_EPOLL")
+  else()
+    message(WARNING "EPOLL is not available on this platform...")
   endif()
 endif ()
-
-# Build with fp16 to support mixed precision training.
-if(USE_FP16)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_FP16")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_FP16")
-  message(STATUS "Build with fp16 to support mixed precision training")
-endif(USE_FP16)
 
 # To compile METIS correct for DGL.
 if(MSVC)
@@ -159,7 +237,6 @@ file(GLOB DGL_SRC
   src/runtime/*.cc
   src/geometry/*.cc
   src/geometry/cpu/*.cc
-  src/dataloading/*.cc
   src/partition/*.cc
 )
 
@@ -180,99 +257,169 @@ list(APPEND DGL_SRC ${DGL_RPC_SRC})
 
 # Configure cuda
 if(USE_CUDA)
-  dgl_config_cuda(DGL_CUDA_SRC)
+  file(GLOB_RECURSE DGL_CUDA_SRC
+    src/array/cuda/*.cc
+    src/array/cuda/*.cu
+    src/array/cuda/uvm/*.cc
+    src/array/cuda/uvm/*.cu
+    src/kernel/cuda/*.cc
+    src/kernel/cuda/*.cu
+    src/partition/cuda/*.cu
+    src/runtime/cuda/*.cc
+    src/runtime/cuda/*.cu
+    src/geometry/cuda/*.cu
+    src/graph/transform/cuda/*.cu
+    src/graph/sampling/randomwalks/*.cu
+  )
   list(APPEND DGL_SRC ${DGL_CUDA_SRC})
-  if(USE_NCCL)
-    add_definitions(-DDGL_USE_NCCL)
-    if (USE_SYSTEM_NCCL)
-      include(cmake/util/FindNccl.cmake)
-      include_directories(${NCCL_INCLUDE_DIR})
-    else()
-      include(cmake/modules/NCCL.cmake)
-      cuda_include_directories(BEFORE ${NCCL_INCLUDE_DIR})
-    endif()
-  endif(USE_NCCL)
-
-  list(APPEND DGL_LINKER_LIBS ${NCCL_LIBRARY})
-endif(USE_CUDA)
-
-if(USE_CUDA)
+  dgl_config_cuda(DGL_LINKER_LIBS)
   cuda_add_library(dgl SHARED ${DGL_SRC})
-  if (USE_NCCL AND NOT USE_SYSTEM_NCCL)
-    add_dependencies(dgl nccl_external)
-  endif()
 else(USE_CUDA)
   add_library(dgl SHARED ${DGL_SRC})
 endif(USE_CUDA)
 
-set_property(TARGET dgl PROPERTY CXX_STANDARD 14)
-
 # include directories
 target_include_directories(dgl PRIVATE "include")
-target_include_directories(dgl PRIVATE "third_party/dlpack/include")
-target_include_directories(dgl PRIVATE "third_party/dmlc-core/include")
-target_include_directories(dgl PRIVATE "third_party/phmap/")
-target_include_directories(dgl PRIVATE "third_party/xbyak/")
-target_include_directories(dgl PRIVATE "third_party/METIS/include/")
-target_include_directories(dgl PRIVATE "tensoradapter/include")
-target_include_directories(dgl PRIVATE "third_party/nanoflann/include")
-target_include_directories(dgl PRIVATE "third_party/libxsmm/include")
-
-
-# For serialization
-if (USE_HDFS)
-  option(DMLC_HDFS_SHARED "dgl has to build with dynamic hdfs library" ON)
+# check for conda includes
+if("$ENV{CONDA_BUILD}" STREQUAL "1")
+  set(in_conda_build TRUE)
+  message(STATUS "Conda build environment detected")
+elseif(DEFINED ENV{CONDA_PREFIX})
+  set(in_conda_prefix TRUE)
+  message(STATUS "Conda environment detected: $ENV{CONDA_PREFIX}")
 endif()
-add_subdirectory("third_party/dmlc-core")
-list(APPEND DGL_LINKER_LIBS dmlc)
-set(GOOGLE_TEST 0) # Turn off dmlc-core test
 
-# Compile METIS
-if(NOT MSVC)
-  set(GKLIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/METIS/GKlib")
-  include(${GKLIB_PATH}/GKlibSystem.cmake)
-  include_directories(${GKLIB_PATH})
-  include_directories("third_party/METIS/include/")
-  add_subdirectory("third_party/METIS/libmetis/")
-  list(APPEND DGL_LINKER_LIBS metis)
-endif(NOT MSVC)
+if (USE_CONDA_INCLUDES)
+  if(in_conda_build)
+    message(STATUS "Using Conda build environment includes: $ENV{PREFIX}")
+    target_include_directories(dgl PRIVATE "$ENV{PREFIX}/include" "$ENV{BUILD_PREFIX}/include")
+  elseif(in_conda_prefix)
+    message(STATUS "Using Conda environment includes: $ENV{CONDA_PREFIX}")
+    target_include_directories(dgl PRIVATE "$ENV{CONDA_PREFIX}/include")
+  else()
+    message(FATAL_ERROR "Conda environment not detected")
+  endif()
+endif()
 
-# Compile LIBXSMM
-if((NOT MSVC) AND USE_LIBXSMM)
-  if(REBUILD_LIBXSMM)
-    add_custom_target(libxsmm COMMAND make realclean COMMAND make -j BLAS=0
-                      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/third_party/libxsmm
-                      )
-  else(REBUILD_LIBXSMM)
-    add_custom_target(libxsmm COMMAND make -j BLAS=0
-                      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/third_party/libxsmm
-                      )
-  endif(REBUILD_LIBXSMM)
-  add_dependencies(dgl libxsmm)
-  list(APPEND DGL_LINKER_LIBS -L${CMAKE_SOURCE_DIR}/third_party/libxsmm/lib/ xsmm)
-endif((NOT MSVC) AND USE_LIBXSMM)
+if(EXTERNAL_DLPACK_PATH)
+  message(STATUS "looking for dlpack headers in ${EXTERNAL_DLPACK_PATH}")
+  include_directories(SYSTEM ${EXTERNAL_DLPACK_PATH})
+else(EXTERNAL_DLPACK_PATH)
+  target_include_directories(dgl PRIVATE "third_party/dlpack/include")
+endif(EXTERNAL_DLPACK_PATH)
 
-if(NOT MSVC)
-  # Only build tensorpipe on linux
-  string(REPLACE "-pedantic" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
-  set(TP_STATIC_OR_SHARED STATIC)
-  add_subdirectory(third_party/tensorpipe)
-  list(APPEND DGL_LINKER_LIBS tensorpipe)
-  target_include_directories(dgl PRIVATE third_party/tensorpipe)
-endif(NOT MSVC)
+if(EXTERNAL_DMLC_PATH)
+  if (USE_HDFS)
+    message(FATAL_ERROR "Cannot use HDFS and external dmlc-core at the same time")
+  endif()
+  message(STATUS "looking for dmlc headers in ${EXTERNAL_DMLC_PATH}")
+  include_directories(SYSTEM ${EXTERNAL_DMLC_PATH})
+  
+  if (NOT EXTERNAL_DMLC_LIB_PATH)
+    message(FATAL_ERROR "EXTERNAL_DMLC_LIB_PATH must be set if EXTERNAL_DMLC_PATH is set")
+  endif()
+  message(STATUS "looking for dmlc library in ${EXTERNAL_DMLC_LIB_PATH}")
+  find_package(dmlc
+    REQUIRED
+    HINTS ${EXTERNAL_DMLC_LIB_PATH}
+  )
+  if(NOT dmlc_FOUND)
+      message(FATAL_ERROR "Failed to find DMLC library")
+  endif()
+  list(APPEND DGL_LINKER_LIBS dmlc::dmlc)
 
-# Compile TVM Runtime and Featgraph
-# (NOTE) We compile a dynamic library called featgraph_runtime, which the DGL library links to.
-# Kernels are packed in a separate dynamic library called featgraph_kernels, which DGL
-# will load during runtime.
-if(USE_TVM)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_TVM")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_TVM")
-  target_include_directories(dgl PRIVATE "featgraph/include")
-  add_subdirectory("featgraph/")
-  list(APPEND DGL_LINKER_LIBS featgraph_runtime)
-  message(STATUS "Build with TVM runtime and featgraph kernels.")
-endif(USE_TVM)
+else(EXTERNAL_DMLC_PATH)
+  target_include_directories(dgl PRIVATE "third_party/dmlc-core/include")
+  # For serialization
+  if (USE_HDFS)
+    option(DMLC_HDFS_SHARED "dgl has to build with dynamic hdfs library" ON)
+  endif()
+  add_subdirectory("third_party/dmlc-core")
+  list(APPEND DGL_LINKER_LIBS dmlc)
+  set(GOOGLE_TEST 0) # Turn off dmlc-core test
+endif(EXTERNAL_DMLC_PATH)
+
+if(EXTERNAL_PHMAP_PATH)
+  include_directories(SYSTEM ${EXTERNAL_PHMAP_PATH})
+else(EXTERNAL_PHMAP_PATH)
+  target_include_directories(dgl PRIVATE "third_party/phmap")
+endif(EXTERNAL_PHMAP_PATH)
+
+
+target_include_directories(dgl PRIVATE "tensoradapter/include")
+target_include_directories(dgl PRIVATE "third_party/pcg/include")
+
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+  include(ExternalProject)
+  set(LIBURING_INSTALL_DIR ${CMAKE_BINARY_DIR}/third_party/liburing)
+  ExternalProject_Add(
+    liburing
+    SOURCE_DIR ${CMAKE_SOURCE_DIR}/third_party/liburing
+    CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=${LIBURING_INSTALL_DIR}
+    BUILD_COMMAND bash -c "make -j 4"
+    BUILD_IN_SOURCE ON
+    INSTALL_COMMAND make install DESTDIR=${LIBURING_INSTALL_DIR}
+    BUILD_BYPRODUCTS ${LIBURING_INSTALL_DIR}/lib/liburing.a
+    BUILD_BYPRODUCTS ${LIBURING_INSTALL_DIR}/include
+    DOWNLOAD_EXTRACT_TIMESTAMP true
+  )
+  set(LIBURING_INCLUDE ${LIBURING_INSTALL_DIR}/include)
+  set(LIBURING ${LIBURING_INSTALL_DIR}/lib/liburing.a)
+endif()
+
+if(EXTERNAL_NANOFLANN_PATH)
+  include_directories(SYSTEM ${EXTERNAL_NANOFLANN_PATH})
+else(EXTERNAL_NANOFLANN_PATH)
+  target_include_directories(dgl PRIVATE "third_party/nanoflann/include")
+endif(EXTERNAL_NANOFLANN_PATH)
+
+if (USE_LIBXSMM)
+  target_include_directories(dgl PRIVATE "third_party/libxsmm/include")
+endif()
+
+if (EXTERNAL_METIS_PATH)
+  find_package(METIS REQUIRED)
+  if (NOT METIS_FOUND)
+    message(FATAL_ERROR "Failed to find METIS library")
+  else()
+    message(STATUS "Found METIS library")
+    target_include_directories(dgl SYSTEM PUBLIC ${METIS_INCLUDE_DIR})
+    list(APPEND DGL_LINKER_LIBS ${METIS_LIBRARIES})
+  endif()
+else(EXTERNAL_METIS_PATH)
+  target_include_directories(dgl PRIVATE "third_party/METIS/include")
+  # Compile METIS
+  if(NOT MSVC)
+    set(GKLIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/third_party/METIS/GKlib")
+    include(${GKLIB_PATH}/GKlibSystem.cmake)
+    include_directories(${GKLIB_PATH})
+    include_directories("third_party/METIS/include/")
+    add_subdirectory("third_party/METIS/libmetis/")
+    list(APPEND DGL_LINKER_LIBS metis)
+    endif(NOT MSVC)
+endif(EXTERNAL_METIS_PATH)
+
+
+# Avoid exposing third-party symbols when using DGL as a library.
+if((NOT MSVC) AND (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Darwin"))
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,--exclude-libs,ALL")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--exclude-libs,ALL")
+endif()
+
+# Compile gpu_cache
+if(USE_CUDA)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_GPU_CACHE")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_GPU_CACHE")
+  # Manually build gpu_cache because CMake always builds it as shared
+  file(GLOB gpu_cache_src
+    third_party/HugeCTR/gpu_cache/src/nv_gpu_cache.cu
+  )
+  cuda_add_library(gpu_cache STATIC ${gpu_cache_src})
+  target_include_directories(gpu_cache PRIVATE "third_party/HugeCTR/gpu_cache/include")
+  target_include_directories(dgl PRIVATE "third_party/HugeCTR/gpu_cache/include")
+  list(APPEND DGL_LINKER_LIBS gpu_cache)
+  message(STATUS "Build with HugeCTR GPU embedding cache.")
+endif(USE_CUDA)
 
 # support PARALLEL_ALGORITHMS
 if (LIBCXX_ENABLE_PARALLEL_ALGORITHMS)
@@ -302,6 +449,8 @@ if(BUILD_TORCH)
       ${CMAKE_COMMAND} -E env
       CMAKE_COMMAND=${CMAKE_CMD}
       CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      EXTERNAL_DMLC_LIB_PATH=${EXTERNAL_DMLC_LIB_PATH}
       BINDIR=${BINDIR}
       cmd /e:on /c ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
       DEPENDS ${BUILD_SCRIPT}
@@ -313,6 +462,8 @@ if(BUILD_TORCH)
       ${CMAKE_COMMAND} -E env
       CMAKE_COMMAND=${CMAKE_CMD}
       CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      EXTERNAL_DMLC_LIB_PATH=${EXTERNAL_DMLC_LIB_PATH}
       BINDIR=${CMAKE_CURRENT_BINARY_DIR}
       bash ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
       DEPENDS ${BUILD_SCRIPT}
@@ -332,13 +483,109 @@ if(BUILD_CPP_TEST)
   include_directories(${gtest_SOURCE_DIR}/include ${gtest_SOURCE_DIR})
   include_directories("include")
   include_directories("third_party/dlpack/include")
-  include_directories("third_party/xbyak")
   include_directories("third_party/dmlc-core/include")
   include_directories("third_party/phmap")
   include_directories("third_party/libxsmm/include")
+  include_directories("third_party/pcg/include")
   file(GLOB_RECURSE TEST_SRC_FILES ${PROJECT_SOURCE_DIR}/tests/cpp/*.cc)
   add_executable(runUnitTests ${TEST_SRC_FILES})
   target_link_libraries(runUnitTests gtest gtest_main)
   target_link_libraries(runUnitTests dgl)
   add_test(UnitTests runUnitTests)
 endif(BUILD_CPP_TEST)
+
+if(BUILD_SPARSE)
+  message(STATUS "Configuring DGL sparse library")
+  file(TO_NATIVE_PATH ${CMAKE_CURRENT_BINARY_DIR} BINDIR)
+  file(TO_NATIVE_PATH ${CMAKE_COMMAND} CMAKE_CMD)
+  get_target_property(DGL_INCLUDE_DIRS dgl INCLUDE_DIRECTORIES)
+  message(STATUS "DGL include directories: ${DGL_INCLUDE_DIRS}")
+  message(STATUS "DGL link directories: ${DGL_INCLUDE_DIRS}")
+  if(MSVC)
+    file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/dgl_sparse/build.bat BUILD_SCRIPT)
+    add_custom_target(
+      dgl_sparse
+      ALL
+      ${CMAKE_COMMAND} -E env
+      CMAKE_COMMAND=${CMAKE_CMD}
+      CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      BINDIR=${BINDIR}
+      INCLUDEDIR="${DGL_INCLUDE_DIRS}"
+      CFLAGS=${CMAKE_C_FLAGS}
+      CXXFLAGS=${CMAKE_CXX_FLAGS}
+      LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+      cmd /e:on /c ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
+      DEPENDS ${BUILD_SCRIPT}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/dgl_sparse)
+  else(MSVC)
+    file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/dgl_sparse/build.sh BUILD_SCRIPT)
+    add_custom_target(
+      dgl_sparse
+      ALL
+      ${CMAKE_COMMAND} -E env
+      CMAKE_COMMAND=${CMAKE_CMD}
+      CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      BINDIR=${CMAKE_CURRENT_BINARY_DIR}
+      INCLUDEDIR="${DGL_INCLUDE_DIRS}"
+      CFLAGS=${CMAKE_C_FLAGS}
+      CXXFLAGS=${CMAKE_CXX_FLAGS}
+      LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+      bash ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
+      DEPENDS ${BUILD_SCRIPT}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/dgl_sparse)
+  endif(MSVC)
+  add_dependencies(dgl_sparse dgl)
+endif(BUILD_SPARSE)
+
+if(BUILD_GRAPHBOLT)
+  message(STATUS "Configuring graphbolt library")
+  string(REPLACE ";" "\\;" CUDA_ARCHITECTURES_ESCAPED "${CUDA_ARCHITECTURES}")
+  file(TO_NATIVE_PATH ${CMAKE_CURRENT_BINARY_DIR} BINDIR)
+  file(TO_NATIVE_PATH ${CMAKE_COMMAND} CMAKE_CMD)
+  if(USE_CUDA)
+    get_target_property(GPU_CACHE_INCLUDE_DIRS gpu_cache INCLUDE_DIRECTORIES)
+  endif(USE_CUDA)
+  string(REPLACE ";" "\\;" GPU_CACHE_INCLUDE_DIRS_ESCAPED "${GPU_CACHE_INCLUDE_DIRS}")
+  if(MSVC)
+    file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/graphbolt/build.bat BUILD_SCRIPT)
+    add_custom_target(
+      graphbolt
+      ALL
+      ${CMAKE_COMMAND} -E env
+      CMAKE_COMMAND=${CMAKE_CMD}
+      CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      BINDIR=${BINDIR}
+      GPU_CACHE_INCLUDE_DIRS="${GPU_CACHE_INCLUDE_DIRS_ESCAPED}"
+      CFLAGS=${CMAKE_C_FLAGS}
+      CXXFLAGS=${CMAKE_CXX_FLAGS}
+      CUDAARCHS="${CUDA_ARCHITECTURES_ESCAPED}"
+      LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+      cmd /e:on /c ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
+      DEPENDS ${BUILD_SCRIPT}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/graphbolt)
+  else(MSVC)
+    file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/graphbolt/build.sh BUILD_SCRIPT)
+    add_custom_target(
+      graphbolt
+      ALL
+      ${CMAKE_COMMAND} -E env
+      CMAKE_COMMAND=${CMAKE_CMD}
+      CUDA_TOOLKIT_ROOT_DIR=${CUDA_TOOLKIT_ROOT_DIR}
+      USE_CUDA=${USE_CUDA}
+      BINDIR=${CMAKE_CURRENT_BINARY_DIR}
+      GPU_CACHE_INCLUDE_DIRS="${GPU_CACHE_INCLUDE_DIRS_ESCAPED}"
+      CFLAGS=${CMAKE_C_FLAGS}
+      CXXFLAGS=${CMAKE_CXX_FLAGS}
+      CUDAARCHS="${CUDA_ARCHITECTURES_ESCAPED}"
+      LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}
+      bash ${BUILD_SCRIPT} ${TORCH_PYTHON_INTERPS}
+      DEPENDS ${BUILD_SCRIPT}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/graphbolt)
+  endif(MSVC)
+  if(USE_CUDA)
+    add_dependencies(graphbolt gpu_cache)
+  endif(USE_CUDA)
+endif(BUILD_GRAPHBOLT)

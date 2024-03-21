@@ -1,9 +1,11 @@
 """Utilities for pytorch NN package"""
-#pylint: disable=no-member, invalid-name
+# pylint: disable=no-member, invalid-name
 
-from mxnet import nd, gluon
 import numpy as np
+from mxnet import gluon, nd
+
 from ... import DGLGraph
+
 
 def matmul_maybe_select(A, B):
     """Perform Matrix multiplication C = A * B but A could be an integer id vector.
@@ -46,6 +48,7 @@ def matmul_maybe_select(A, B):
     else:
         return nd.dot(A, B)
 
+
 def bmm_maybe_select(A, B, index):
     """Slice submatrices of A by the given index and perform bmm.
 
@@ -86,6 +89,7 @@ def bmm_maybe_select(A, B, index):
         BB = nd.take(B, index, axis=0)
         return nd.batch_dot(A.expand_dims(1), BB).squeeze(1)
 
+
 def normalize(x, p=2, axis=1, eps=1e-12):
     r"""Performs :math:`L_p` normalization of inputs over specified dimension.
 
@@ -104,11 +108,14 @@ def normalize(x, p=2, axis=1, eps=1e-12):
         dim (int): the dimension to reduce. Default: 1
         eps (float): small value to avoid division by zero. Default: 1e-12
     """
-    denom = nd.clip(nd.norm(x, ord=p, axis=axis, keepdims=True), eps, float('inf'))
+    denom = nd.clip(
+        nd.norm(x, ord=p, axis=axis, keepdims=True), eps, float("inf")
+    )
     return x / denom
 
+
 class Sequential(gluon.nn.Sequential):
-    r"""A squential container for stacking graph neural network blocks.
+    r"""A squential container for stacking graph neural network blocks
 
     We support two modes: sequentially apply GNN blocks on the same graph or
     a list of given graphs. In the second case, the number of graphs equals the
@@ -179,7 +186,7 @@ class Sequential(gluon.nn.Sequential):
     >>>             graph.ndata['h'] = n_feat
     >>>             graph.update_all(fn.copy_u('h', 'm'), fn.sum('m', 'h'))
     >>>             n_feat += graph.ndata['h']
-    >>>             return n_feat.reshape(graph.number_of_nodes() // 2, 2, -1).sum(1)
+    >>>             return n_feat.reshape(graph.num_nodes() // 2, 2, -1).sum(1)
     >>>
     >>> g1 = dgl.DGLGraph(nx.erdos_renyi_graph(32, 0.05))
     >>> g2 = dgl.DGLGraph(nx.erdos_renyi_graph(16, 0.2))
@@ -197,6 +204,7 @@ class Sequential(gluon.nn.Sequential):
      [-119.23065   -26.78553  -111.11185  -166.08322 ]]
     <NDArray 4x4 @cpu(0)>
     """
+
     def __init__(self, prefix=None, params=None):
         super(Sequential, self).__init__(prefix=prefix, params=params)
 
@@ -224,6 +232,8 @@ class Sequential(gluon.nn.Sequential):
                     feats = (feats,)
                 feats = module(graph, *feats)
         else:
-            raise TypeError('The first argument of forward must be a DGLGraph'
-                            ' or a list of DGLGraph s')
+            raise TypeError(
+                "The first argument of forward must be a DGLGraph"
+                " or a list of DGLGraph s"
+            )
         return feats

@@ -10,9 +10,10 @@ API Reference
    dgl.DGLGraph
    dgl.distributed
    dgl.function
-   nn
+   nn-pytorch
+   nn-tensorflow
+   nn-mxnet
    dgl.ops
    dgl.sampling
-   dgl.contrib.UnifiedTensor
    udf
-   transform
+   transforms

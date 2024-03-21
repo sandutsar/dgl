@@ -10,6 +10,7 @@ contributor to the DGL project.  We will put your name in the list below.
 
 Contributors
 ------------
+
 * [Minjie Wang](https://github.com/jermainewang) from AWS
 * [Da Zheng](https://github.com/zheng-da) from AWS
 * [Quan Gan](https://github.com/BarclayII) from AWS
@@ -35,6 +36,7 @@ Contributors
 * [Michal Szarmach](https://github.com/mszarma) from Intel
 * [Izabela Mazur](https://github.com/IzabelaMazur) from Intel
 * [Sanchit Misra](https://github.com/sanchit-misra) from Intel
+* [Andrzej Kotlowski](https://github.com/anko-intel) from Intel
 * [Sheng Zha](https://github.com/szha) from AWS
 * [Yifei Ma](https://github.com/yifeim) from  AWS
 * [Yizhi Liu](https://github.com/yzhliu) from AWS
@@ -60,3 +62,7 @@ Contributors
 * [Xin Yao](https://github.com/yaox12) from Nvidia
 * [Abdurrahman Yasar](https://github.com/ayasar70) from Nvidia
 * [Shaked Brody](https://github.com/shakedbr) from Technion
+* [Jiahui Liu](https://github.com/paoxiaode) from Nvidia
+* [Neil Dickson](https://github.com/ndickson-nvidia) from Nvidia
+* [Chang Liu](https://github.com/chang-l) from Nvidia
+* [Muhammed Fatih Balin](https://github.com/mfbalin) from Nvidia and Georgia Tech

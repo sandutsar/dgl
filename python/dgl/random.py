@@ -1,11 +1,11 @@
 """Python interfaces to DGL random number generators."""
 import numpy as np
 
+from . import backend as F, ndarray as nd
 from ._ffi.function import _init_api
-from . import backend as F
-from . import ndarray as nd
 
-__all__ = ['seed']
+__all__ = ["seed"]
+
 
 def seed(val):
     """Set the random seed of DGL.
@@ -16,6 +16,7 @@ def seed(val):
         The seed.
     """
     _CAPI_SetSeed(val)
+
 
 def choice(a, size, replace=True, prob=None):  # pylint: disable=invalid-name
     """An equivalent to :func:`numpy.random.choice`.
@@ -57,7 +58,7 @@ def choice(a, size, replace=True, prob=None):  # pylint: disable=invalid-name
     samples : 1-D tensor
         The generated random samples
     """
-    #TODO(minjie): support RNG as one of the arguments.
+    # TODO(minjie): support RNG as one of the arguments.
     if isinstance(size, tuple):
         num = np.prod(size)
     else:
@@ -74,7 +75,9 @@ def choice(a, size, replace=True, prob=None):  # pylint: disable=invalid-name
         prob = F.zerocopy_to_dgl_ndarray(prob)
 
     bits = 64  # index array is in 64-bit
-    chosen_idx = _CAPI_Choice(int(num), int(population), prob, bool(replace), bits)
+    chosen_idx = _CAPI_Choice(
+        int(num), int(population), prob, bool(replace), bits
+    )
     chosen_idx = F.zerocopy_from_dgl_ndarray(chosen_idx)
 
     if F.is_tensor(a):
@@ -87,4 +90,5 @@ def choice(a, size, replace=True, prob=None):  # pylint: disable=invalid-name
     else:
         return chosen
 
-_init_api('dgl.rng', __name__)
+
+_init_api("dgl.rng", __name__)

@@ -1,9 +1,10 @@
-''' Credit: https://github.com/fanyun-sun/InfoGraph '''
+""" Credit: https://github.com/fanyun-sun/InfoGraph """
+
+import math
 
 import torch as th
 import torch.nn.functional as F
 
-import math
 
 def get_positive_expectation(p_samples, average=True):
     """Computes the positive part of a JS Divergence.
@@ -13,8 +14,8 @@ def get_positive_expectation(p_samples, average=True):
     Returns:
         th.Tensor
     """
-    log_2 = math.log(2.)
-    Ep = log_2 - F.softplus(- p_samples)
+    log_2 = math.log(2.0)
+    Ep = log_2 - F.softplus(-p_samples)
 
     if average:
         return Ep.mean()
@@ -30,7 +31,7 @@ def get_negative_expectation(q_samples, average=True):
     Returns:
         th.Tensor
     """
-    log_2 = math.log(2.)
+    log_2 = math.log(2.0)
     Eq = F.softplus(-q_samples) + q_samples - log_2
 
     if average:
@@ -40,7 +41,6 @@ def get_negative_expectation(q_samples, average=True):
 
 
 def local_global_loss_(l_enc, g_enc, graph_id):
-
     num_graphs = g_enc.shape[0]
     num_nodes = l_enc.shape[0]
 
@@ -50,9 +50,8 @@ def local_global_loss_(l_enc, g_enc, graph_id):
     neg_mask = th.ones((num_nodes, num_graphs)).to(device)
 
     for nodeidx, graphidx in enumerate(graph_id):
-
-        pos_mask[nodeidx][graphidx] = 1.
-        neg_mask[nodeidx][graphidx] = 0.
+        pos_mask[nodeidx][graphidx] = 1.0
+        neg_mask[nodeidx][graphidx] = 0.0
 
     res = th.mm(l_enc, g_enc.t())
 
@@ -65,7 +64,6 @@ def local_global_loss_(l_enc, g_enc, graph_id):
 
 
 def global_global_loss_(sup_enc, unsup_enc):
-
     num_graphs = sup_enc.shape[0]
     device = sup_enc.device
 

@@ -4,33 +4,32 @@ Including:
 """
 from __future__ import absolute_import
 
+import os
+
 from collections import OrderedDict
+
 import networkx as nx
 
 import numpy as np
-import os
 
-from .dgl_dataset import DGLBuiltinDataset
 from .. import backend as F
-from .utils import _get_dgl_url, save_graphs, save_info, load_graphs, \
-    load_info, deprecate_property
 from ..convert import from_networkx
 
-__all__ = ['SST', 'SSTDataset']
+from .dgl_dataset import DGLBuiltinDataset
+from .utils import (
+    _get_dgl_url,
+    deprecate_property,
+    load_graphs,
+    load_info,
+    save_graphs,
+    save_info,
+)
+
+__all__ = ["SST", "SSTDataset"]
 
 
 class SSTDataset(DGLBuiltinDataset):
     r"""Stanford Sentiment Treebank dataset.
-
-    .. deprecated:: 0.5.0
-        
-        - ``trees`` is deprecated, it is replaced by:
-
-            >>> dataset = SSTDataset()
-            >>> for tree in dataset:
-            ....    # your code here
-
-        - ``num_vocabs`` is deprecated, it is replaced by ``vocab_size``.
 
     Each sample is the constituency tree of a sentence. The leaf nodes
     represent words. The word is a int value stored in the ``x`` feature field.
@@ -63,22 +62,22 @@ class SSTDataset(DGLBuiltinDataset):
         Default: ~/.dgl/
     force_reload : bool
         Whether to reload the dataset. Default: False
-    verbose: bool
+    verbose : bool
         Whether to print out progress information. Default: True.
+    transform : callable, optional
+        A transform that takes in a :class:`~dgl.DGLGraph` object and returns
+        a transformed version. The :class:`~dgl.DGLGraph` object will be
+        transformed before every access.
 
     Attributes
     ----------
     vocab : OrderedDict
         Vocabulary of the dataset
-    trees : list
-        A list of DGLGraph objects
     num_classes : int
         Number of classes for each node
     pretrained_emb: Tensor
         Pretrained glove embedding with respect the vocabulary.
     vocab_size : int
-        The size of the vocabulary
-    num_vocabs : int
         The size of the vocabulary
 
     Notes
@@ -114,43 +113,58 @@ class SSTDataset(DGLBuiltinDataset):
     PAD_WORD = -1  # special pad word id
     UNK_WORD = -1  # out-of-vocabulary word id
 
-    def __init__(self,
-                 mode='train',
-                 glove_embed_file=None,
-                 vocab_file=None,
-                 raw_dir=None,
-                 force_reload=False,
-                 verbose=False):
-        assert mode in ['train', 'dev', 'test', 'tiny']
-        _url = _get_dgl_url('dataset/sst.zip')
-        self._glove_embed_file = glove_embed_file if mode == 'train' else None
+    def __init__(
+        self,
+        mode="train",
+        glove_embed_file=None,
+        vocab_file=None,
+        raw_dir=None,
+        force_reload=False,
+        verbose=False,
+        transform=None,
+    ):
+        assert mode in ["train", "dev", "test", "tiny"]
+        _url = _get_dgl_url("dataset/sst.zip")
+        self._glove_embed_file = glove_embed_file if mode == "train" else None
         self.mode = mode
         self._vocab_file = vocab_file
-        super(SSTDataset, self).__init__(name='sst',
-                                         url=_url,
-                                         raw_dir=raw_dir,
-                                         force_reload=force_reload,
-                                         verbose=verbose)
+        super(SSTDataset, self).__init__(
+            name="sst",
+            url=_url,
+            raw_dir=raw_dir,
+            force_reload=force_reload,
+            verbose=verbose,
+            transform=transform,
+        )
 
     def process(self):
         from nltk.corpus.reader import BracketParseCorpusReader
+
         # load vocab file
         self._vocab = OrderedDict()
-        vocab_file = self._vocab_file if self._vocab_file is not None else os.path.join(self.raw_path, 'vocab.txt')
-        with open(vocab_file, encoding='utf-8') as vf:
+        vocab_file = (
+            self._vocab_file
+            if self._vocab_file is not None
+            else os.path.join(self.raw_path, "vocab.txt")
+        )
+        with open(vocab_file, encoding="utf-8") as vf:
             for line in vf.readlines():
                 line = line.strip()
                 self._vocab[line] = len(self._vocab)
 
         # filter glove
-        if self._glove_embed_file is not None and os.path.exists(self._glove_embed_file):
+        if self._glove_embed_file is not None and os.path.exists(
+            self._glove_embed_file
+        ):
             glove_emb = {}
-            with open(self._glove_embed_file, 'r', encoding='utf-8') as pf:
+            with open(self._glove_embed_file, "r", encoding="utf-8") as pf:
                 for line in pf.readlines():
-                    sp = line.split(' ')
+                    sp = line.split(" ")
                     if sp[0].lower() in self._vocab:
-                        glove_emb[sp[0].lower()] = np.asarray([float(x) for x in sp[1:]])
-        files = ['{}.txt'.format(self.mode)]
+                        glove_emb[sp[0].lower()] = np.asarray(
+                            [float(x) for x in sp[1:]]
+                        )
+        files = ["{}.txt".format(self.mode)]
         corpus = BracketParseCorpusReader(self.raw_path, files)
         sents = corpus.parsed_sents(files[0])
 
@@ -158,15 +172,27 @@ class SSTDataset(DGLBuiltinDataset):
         pretrained_emb = []
         fail_cnt = 0
         for line in self._vocab.keys():
-            if self._glove_embed_file is not None and os.path.exists(self._glove_embed_file):
+            if self._glove_embed_file is not None and os.path.exists(
+                self._glove_embed_file
+            ):
                 if not line.lower() in glove_emb:
                     fail_cnt += 1
-                pretrained_emb.append(glove_emb.get(line.lower(), np.random.uniform(-0.05, 0.05, 300)))
+                pretrained_emb.append(
+                    glove_emb.get(
+                        line.lower(), np.random.uniform(-0.05, 0.05, 300)
+                    )
+                )
 
         self._pretrained_emb = None
-        if self._glove_embed_file is not None and os.path.exists(self._glove_embed_file):
+        if self._glove_embed_file is not None and os.path.exists(
+            self._glove_embed_file
+        ):
             self._pretrained_emb = F.tensor(np.stack(pretrained_emb, 0))
-            print('Miss word in GloVe {0:.4f}'.format(1.0 * fail_cnt / len(self._pretrained_emb)))
+            print(
+                "Miss word in GloVe {0:.4f}".format(
+                    1.0 * fail_cnt / len(self._pretrained_emb)
+                )
+            )
         # build trees
         self._trees = []
         for sent in sents:
@@ -183,49 +209,50 @@ class SSTDataset(DGLBuiltinDataset):
                     word = self.vocab.get(child[0].lower(), self.UNK_WORD)
                     g.add_node(cid, x=word, y=int(child.label()), mask=1)
                 else:
-                    g.add_node(cid, x=SSTDataset.PAD_WORD, y=int(child.label()), mask=0)
+                    g.add_node(
+                        cid, x=SSTDataset.PAD_WORD, y=int(child.label()), mask=0
+                    )
                     _rec_build(cid, child)
                 g.add_edge(cid, nid)
 
         # add root
         g.add_node(0, x=SSTDataset.PAD_WORD, y=int(root.label()), mask=0)
         _rec_build(0, root)
-        ret = from_networkx(g, node_attrs=['x', 'y', 'mask'])
+        ret = from_networkx(g, node_attrs=["x", "y", "mask"])
         return ret
 
-    def has_cache(self):
-        graph_path = os.path.join(self.save_path, self.mode + '_dgl_graph.bin')
-        vocab_path = os.path.join(self.save_path, 'vocab.pkl')
-        return os.path.exists(graph_path) and os.path.exists(vocab_path)
-
-    def save(self):
-        graph_path = os.path.join(self.save_path, self.mode + '_dgl_graph.bin')
-        save_graphs(graph_path, self._trees)
-        vocab_path = os.path.join(self.save_path, 'vocab.pkl')
-        save_info(vocab_path, {'vocab': self.vocab})
-        if self.pretrained_emb:
-            emb_path = os.path.join(self.save_path, 'emb.pkl')
-            save_info(emb_path, {'embed': self.pretrained_emb})
-
-    def load(self):
-        graph_path = os.path.join(self.save_path, self.mode + '_dgl_graph.bin')
-        vocab_path = os.path.join(self.save_path, 'vocab.pkl')
-        emb_path = os.path.join(self.save_path, 'emb.pkl')
-
-        self._trees = load_graphs(graph_path)[0]
-        self._vocab = load_info(vocab_path)['vocab']
-        self._pretrained_emb = None
-        if os.path.exists(emb_path):
-            self._pretrained_emb = load_info(emb_path)['embed']
+    @property
+    def graph_path(self):
+        return os.path.join(self.save_path, self.mode + "_dgl_graph.bin")
 
     @property
-    def trees(self):
-        deprecate_property('dataset.trees', '[dataset[i] for i in len(dataset)]')
-        return self._trees
+    def vocab_path(self):
+        return os.path.join(self.save_path, "vocab.pkl")
+
+    def has_cache(self):
+        return os.path.exists(self.graph_path) and os.path.exists(
+            self.vocab_path
+        )
+
+    def save(self):
+        save_graphs(self.graph_path, self._trees)
+        save_info(self.vocab_path, {"vocab": self.vocab})
+        if self.pretrained_emb:
+            emb_path = os.path.join(self.save_path, "emb.pkl")
+            save_info(emb_path, {"embed": self.pretrained_emb})
+
+    def load(self):
+        emb_path = os.path.join(self.save_path, "emb.pkl")
+
+        self._trees = load_graphs(self.graph_path)[0]
+        self._vocab = load_info(self.vocab_path)["vocab"]
+        self._pretrained_emb = None
+        if os.path.exists(emb_path):
+            self._pretrained_emb = load_info(emb_path)["embed"]
 
     @property
     def vocab(self):
-        r""" Vocabulary
+        r"""Vocabulary
 
         Returns
         -------
@@ -239,7 +266,7 @@ class SSTDataset(DGLBuiltinDataset):
         return self._pretrained_emb
 
     def __getitem__(self, idx):
-        r""" Get graph by index
+        r"""Get graph by index
 
         Parameters
         ----------
@@ -255,16 +282,14 @@ class SSTDataset(DGLBuiltinDataset):
             - ``ndata['y']:`` label of the node
             - ``ndata['mask']``: 1 if the node is a leaf, otherwise 0
         """
-        return self._trees[idx]
+        if self._transform is None:
+            return self._trees[idx]
+        else:
+            return self._transform(self._trees[idx])
 
     def __len__(self):
         r"""Number of graphs in the dataset."""
         return len(self._trees)
-
-    @property
-    def num_vocabs(self):
-        deprecate_property('dataset.num_vocabs', 'dataset.vocab_size')
-        return self.vocab_size
 
     @property
     def vocab_size(self):
